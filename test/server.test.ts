@@ -12,7 +12,11 @@ const ORIGIN = `http://127.0.0.1:${PORT}`;
 let server: ChildProcess;
 
 before(async () => {
-	server = spawn(process.execPath, ["server/main.ts", "--no-open", "--port", String(PORT)], { stdio: ["ignore", "pipe", "inherit"] });
+	const appHome = await mkdtemp(join(tmpdir(), "s-ui-home-"));
+	server = spawn(process.execPath, ["server/main.ts", "--no-open", "--port", String(PORT)], {
+		stdio: ["ignore", "pipe", "inherit"],
+		env: { ...process.env, S_UI_HOME: appHome },
+	});
 	await new Promise<void>((resolve) => server.stdout!.on("data", (d) => String(d).includes("running") && resolve()));
 });
 after(() => server.kill("SIGTERM"));

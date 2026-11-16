@@ -9,10 +9,12 @@ Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建
 - `server/page-capture.ts`：在用户的预览页面里执行的采集函数（自包含，会被转成字符串注入）：找圈内元素、拍 DOM 快照。
 - `server/annotate.ts`：Playwright 以相同视口渲染快照、还原弹窗与滚动、画圈截图，并给圈内元素补源码位置。
 - `server/source-locator.ts`：按 id、文本、class 在项目源码里猜元素位置。
+- `server/projects.ts`：最近项目（持久化到 `~/.s-ui/config.json`）、列目录（供应用内文件夹选择框）、新建项目文件夹；`server/app-home.ts` 定义 s-ui 自己的目录（默认 `~/.s-ui`，`S_UI_HOME` 可覆盖）。
 - `server/models.ts`：可用模型列表与默认模型；拒绝 Claude 订阅 OAuth（pi-ai 在该凭据下会伪装成 Claude Code）。
-- `web/src/useWorkspace.ts`：WebSocket 连接与界面状态归约。
+- `web/src/useWorkspace.ts`：WebSocket 连接与界面状态归约；带 `requestId` 的命令（打开、新建、列目录）可等待结果。
 - `web/src/i18n.ts`：全部界面文案（中英）的唯一来源。
-- `web/src/Preview.tsx`：预览 iframe 与画圈覆盖层；`web/src/Chat.tsx`：对话区。
+- `web/src/styles.css`：设计 token（参照 JetBrains 新 UI，浅色/深色跟随系统）；`web/src/ui.tsx`：共享控件（按钮、菜单、模态框、项目图标），密度统一为 compact。
+- `web/src/App.tsx` 组装：`Toolbar.tsx`（项目切换、模型、语言、运行状态）、`Welcome.tsx`（未打开项目时）、`Chat.tsx`（对话工具窗，Markdown、工具调用折叠）、`Preview.tsx`（标签栏、地址条、画圈覆盖层）、`StatusBar.tsx`、`FolderPicker.tsx`、`NewProjectDialog.tsx`。
 - `examples/hello-page/`：最小示例项目。
 - `test/`：验收测试，`npm test` 运行（需要网络安装示例依赖、已安装 Playwright Chromium）。
 

@@ -17,9 +17,12 @@
     "@earendil-works/pi-coding-agent": "^1.5.2",
     "@tailwindcss/vite": "^4.3.5",
     "@vitejs/plugin-react": "^6.3.0",
+    "lucide-react": "^1.73.0",
     "playwright": "^1.65.1",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
+    "react-markdown": "^10.1.0",
+    "remark-gfm": "^4.0.1",
     "tailwindcss": "^4.3.5",
     "vite": "^8.3.8",
     "ws": "^8.23.0"

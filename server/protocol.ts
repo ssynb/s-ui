@@ -24,13 +24,24 @@ export type SessionEvent =
 
 export type ModelInfo = { id: string; label: string };
 
+export type FolderEntry = { name: string; path: string; isProject: boolean };
+export type FolderListing = { path: string; parent: string | null; entries: FolderEntry[] };
+
+/** 常用位置的快捷入口；key 由界面翻译成名字。 */
+export type Place = { key: "home" | "desktop" | "documents"; path: string };
+
+// 带 requestId 的命令，结果（opened / folder）或失败（error）回带同一个 requestId。
 export type ClientMessage =
-	| { type: "open"; dir: string; model: string }
+	| { type: "open"; requestId: string; dir: string; model: string }
+	| { type: "createProject"; requestId: string; parent: string; name: string; model: string }
+	| { type: "listFolder"; requestId: string; path: string }
 	| { type: "prompt"; sessionId: string; text: string; annotation?: Annotation }
 	| { type: "abort"; sessionId: string };
 
 export type ServerMessage =
-	| { type: "hello"; models: ModelInfo[]; defaultModel?: string; exampleDir: string }
-	| { type: "opened"; sessionId: string; dir: string }
+	| { type: "hello"; models: ModelInfo[]; defaultModel?: string; exampleDir: string; home: string; places: Place[]; recentProjects: string[] }
+	| { type: "opened"; requestId?: string; sessionId: string; dir: string; model: string }
+	| { type: "recentProjects"; projects: string[] }
+	| { type: "folder"; requestId: string; listing: FolderListing }
 	| { type: "event"; sessionId: string; event: SessionEvent }
-	| { type: "error"; message: string };
+	| { type: "error"; requestId?: string; code?: string; message: string };

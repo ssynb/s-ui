@@ -3,8 +3,9 @@ import { spawn } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { createServer } from "node:http";
 import type { AddressInfo } from "node:net";
+import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { resolve } from "node:path";
+import { join, resolve } from "node:path";
 import { parseArgs } from "node:util";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import tailwindcss from "@tailwindcss/vite";
@@ -12,8 +13,10 @@ import react from "@vitejs/plugin-react";
 import { createServer as createViteServer } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
 import { DEFAULT_MODEL, listUsableModels, modelKey } from "./models.ts";
+import { APP_HOME } from "./app-home.ts";
 import { ProjectSession } from "./project-session.ts";
-import type { ClientMessage, ServerMessage } from "./protocol.ts";
+import { createProjectFolder, listFolder, RecentProjects } from "./projects.ts";
+import type { ClientMessage, Place, ServerMessage } from "./protocol.ts";
 
 const WEB_ROOT = new URL("../web", import.meta.url).pathname;
 const EXAMPLE_DIR = new URL("../examples/hello-page", import.meta.url).pathname;
@@ -23,6 +26,13 @@ const { values: flags } = parseArgs({
 });
 
 const modelRuntime = await ModelRuntime.create();
+const recentProjects = await RecentProjects.load(join(APP_HOME, "config.json"));
+const HOME = homedir();
+const PLACES: Place[] = [
+	{ key: "home", path: HOME },
+	{ key: "desktop", path: join(HOME, "Desktop") },
+	{ key: "documents", path: join(HOME, "Documents") },
+].filter((p): p is Place => existsSync(p.path));
 type OpenedSession = { id: string; session: ProjectSession };
 // 每个文件夹只有一个会话；存 Promise 让并发的 open 共享同一次创建。
 const sessionsByDir = new Map<string, Promise<OpenedSession>>();
@@ -31,7 +41,15 @@ const sessionsById = new Map<string, ProjectSession>();
 let appOrigins: string[] = [];
 
 function expandDir(dir: string) {
-	return resolve(dir.trim().replace(/^~(?=$|\/)/, homedir()));
+	return resolve(dir.trim().replace(/^~(?=$|[\\/])/, HOME));
+}
+
+function assertFolder(dir: string) {
+	if (!existsSync(dir) || !statSync(dir).isDirectory()) throw Object.assign(new Error(`Folder not found: ${dir}`), { code: "ENOENT" });
+}
+
+function broadcast(msg: ServerMessage) {
+	for (const client of wss.clients) client.send(JSON.stringify(msg));
 }
 
 async function createSession(dir: string, modelId: string): Promise<OpenedSession> {
@@ -58,32 +76,48 @@ function connect(ws: WebSocket) {
 	const subscriptions = new Map<string, () => void>();
 	ws.on("close", () => subscriptions.forEach((off) => off()));
 
-	const handle = async (raw: string) => {
-		const msg = JSON.parse(raw) as ClientMessage;
+	const open = async (requestId: string, dir: string, model: string) => {
+		const { id: sessionId, session } = await openSession(dir, model);
+		subscriptions.get(sessionId)?.();
+		send({ type: "opened", requestId, sessionId, dir, model: modelKey(session.model) });
+		subscriptions.set(sessionId, session.subscribe((event) => send({ type: "event", sessionId, event })));
+		await recentProjects.add(dir);
+		broadcast({ type: "recentProjects", projects: await recentProjects.list() });
+	};
+
+	const handle = async (msg: ClientMessage) => {
 		if (msg.type === "open") {
 			const dir = expandDir(msg.dir);
-			const { id: sessionId, session } = await openSession(dir, msg.model);
-			subscriptions.get(sessionId)?.();
-			send({ type: "opened", sessionId, dir });
-			subscriptions.set(sessionId, session.subscribe((event) => send({ type: "event", sessionId, event })));
-			return;
+			assertFolder(dir);
+			return open(msg.requestId, dir, msg.model);
 		}
+		if (msg.type === "createProject") return open(msg.requestId, await createProjectFolder(expandDir(msg.parent), msg.name), msg.model);
+		if (msg.type === "listFolder") return send({ type: "folder", requestId: msg.requestId, listing: await listFolder(expandDir(msg.path)) });
 		const session = sessionsById.get(msg.sessionId);
 		if (!session) throw new Error(`Unknown session: ${msg.sessionId}`);
 		if (msg.type === "prompt") return session.prompt(msg.text, msg.annotation);
 		if (msg.type === "abort") return session.abort();
 	};
 	ws.on("message", (data) => {
-		handle(data.toString()).catch((error: Error) => send({ type: "error", message: error.message }));
+		let requestId: string | undefined;
+		const run = async () => {
+			const msg = JSON.parse(data.toString()) as ClientMessage;
+			requestId = "requestId" in msg ? msg.requestId : undefined;
+			await handle(msg);
+		};
+		run().catch((error: NodeJS.ErrnoException) => send({ type: "error", requestId, code: error.code, message: error.message }));
 	});
 
-	listUsableModels(modelRuntime).then((models) => {
+	Promise.all([listUsableModels(modelRuntime), recentProjects.list()]).then(([models, recents]) => {
 		const ids = models.map(modelKey);
 		send({
 			type: "hello",
 			models: ids.map((id) => ({ id, label: id })),
 			defaultModel: ids.includes(DEFAULT_MODEL) ? DEFAULT_MODEL : ids[0],
 			exampleDir: EXAMPLE_DIR,
+			home: HOME,
+			places: PLACES,
+			recentProjects: recents,
 		});
 	});
 }

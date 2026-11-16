@@ -1,56 +1,156 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 
 // 全部界面文案的唯一来源。新增文案时两种语言同时补齐，类型会检查缺漏。
 const en = {
-	folderPlaceholder: "Project folder path, e.g. ~/my-site (created if missing)",
-	open: "Open",
-	openExample: "Try the example",
+	tagline: "Design web pages by chatting and circling",
+	chooseProject: "Choose project",
+	recentProjects: "Recent projects",
+	openFolder: "Open folder…",
+	newProject: "New project…",
+	tryExample: "Open example project",
 	model: "Model",
-	chatPlaceholder: "Tell the AI what to build or change…",
+	modelLocked: "The model is chosen when a project is opened",
+	language: "中文",
+	languageLabel: "Switch language",
+	noRecent: "No projects yet",
+	noRecentHint: "Open a front-end project folder, or create an empty project and let the AI build the page.",
+
+	openFolderTitle: "Open folder",
+	chooseLocationTitle: "Choose location",
+	pathLabel: "Folder path",
+	up: "Parent folder",
+	places: { home: "Home", desktop: "Desktop", documents: "Documents" },
+	frontendProject: "Front-end project",
+	noSubfolders: "No subfolders",
+	open: "Open",
+	choose: "Choose",
+	cancel: "Cancel",
+
+	newProjectTitle: "New project",
+	projectName: "Project name",
+	location: "Location",
+	change: "Change…",
+	create: "Create",
+	newProjectHint: "Creates an empty folder. Then tell the AI what page you want.",
+
+	errors: {
+		ENOENT: "The folder doesn't exist",
+		EEXIST: "A folder with this name already exists",
+		EACCES: "No permission to access this folder",
+		EPERM: "No permission to access this folder",
+		ENOTDIR: "This isn't a folder",
+		EINVAL: "The project name must be a single folder name",
+	} as Record<string, string>,
+
+	chatTitle: "AI chat",
+	chatPlaceholder: "Describe the page you want, or what to change…",
 	send: "Send",
 	stop: "Stop",
-	thinking: "Working…",
-	noFolder: "Open a project folder to start.",
-	previewEmpty: "This folder has no page yet. Ask the AI, e.g. “Make a landing page for my coffee shop”.",
+	sendHint: "Enter to send · Shift+Enter for a new line",
+	toolsSummary: (n: number) => (n === 1 ? "Ran 1 action" : `Ran ${n} actions`),
+	circledImage: "Circled area",
+
+	previewTab: "Preview",
+	reload: "Reload preview",
+	draw: "Circle to edit",
+	exitDraw: "Exit circling",
+	drawingBanner: "Circle the area you want to change",
+	escToExit: "Esc to exit",
+	annotationPlaceholder: "What should change here?",
+	captureFailed: "Couldn't capture the circled area from the preview. Reload the preview and try again.",
+	previewEmpty: "This folder has no page yet. Tell the AI what to build, e.g. “a landing page for my coffee shop”.",
 	previewInstalling: "Installing dependencies…",
 	previewStarting: "Starting the page…",
 	previewError: "The page failed to start",
 	previewStopped: "The page server stopped",
-	draw: "Circle to edit",
-	drawing: "Drawing — drag around an area",
-	annotationPlaceholder: "What should change here?",
-	cancel: "Cancel",
-	circledImage: "Circled area",
-	captureFailed: "Couldn't capture the circled area from the preview. Reload the preview and try again.",
+
+	devRunning: "Page running",
+	devInstalling: "Installing dependencies",
+	devStarting: "Starting page",
+	devError: "Page failed to start",
+	devStopped: "Page server stopped",
+	devEmpty: "No page yet",
+	noProject: "No project open",
+	sessionIdle: "AI idle",
+	sessionBusy: "AI working…",
 	disconnected: "Disconnected from s-ui. Restart it and reload this page.",
-	language: "中文",
 };
 
 type Messages = typeof en;
 
 const zh: Messages = {
-	folderPlaceholder: "项目文件夹路径，例如 ~/my-site（不存在会新建）",
-	open: "打开",
-	openExample: "试试示例项目",
+	tagline: "用对话和画圈设计你的网页",
+	chooseProject: "选择项目",
+	recentProjects: "最近项目",
+	openFolder: "打开文件夹…",
+	newProject: "新建项目…",
+	tryExample: "打开示例项目",
 	model: "模型",
-	chatPlaceholder: "告诉 AI 要做什么页面、改什么…",
+	modelLocked: "模型在打开项目时选定",
+	language: "English",
+	languageLabel: "切换语言",
+	noRecent: "还没有打开过项目",
+	noRecentHint: "打开一个前端项目文件夹，或新建一个空项目让 AI 来做页面。",
+
+	openFolderTitle: "打开文件夹",
+	chooseLocationTitle: "选择存放位置",
+	pathLabel: "文件夹路径",
+	up: "上一级",
+	places: { home: "主目录", desktop: "桌面", documents: "文稿" },
+	frontendProject: "前端项目",
+	noSubfolders: "没有子文件夹",
+	open: "打开",
+	choose: "选择",
+	cancel: "取消",
+
+	newProjectTitle: "新建项目",
+	projectName: "项目名称",
+	location: "位置",
+	change: "更改…",
+	create: "创建",
+	newProjectHint: "会新建一个空文件夹，打开后对 AI 说你想要什么页面。",
+
+	errors: {
+		ENOENT: "文件夹不存在",
+		EEXIST: "同名文件夹已存在",
+		EACCES: "没有权限访问这个文件夹",
+		EPERM: "没有权限访问这个文件夹",
+		ENOTDIR: "这不是一个文件夹",
+		EINVAL: "项目名称只能是一个文件夹名",
+	},
+
+	chatTitle: "AI 对话",
+	chatPlaceholder: "说说你想要什么页面，或者要改哪里…",
 	send: "发送",
 	stop: "停止",
-	thinking: "处理中…",
-	noFolder: "先打开一个项目文件夹。",
+	sendHint: "Enter 发送 · Shift+Enter 换行",
+	toolsSummary: (n: number) => `执行了 ${n} 个操作`,
+	circledImage: "圈选区域",
+
+	previewTab: "预览",
+	reload: "刷新预览",
+	draw: "画圈修改",
+	exitDraw: "退出画圈",
+	drawingBanner: "在页面上圈出要改的地方",
+	escToExit: "按 Esc 退出",
+	annotationPlaceholder: "这里要怎么改？",
+	captureFailed: "没能从预览里采集圈选区域，请刷新预览后重试。",
 	previewEmpty: "这个文件夹还没有页面。在左边对 AI 说，比如“做一个咖啡店的落地页”。",
 	previewInstalling: "正在安装依赖…",
 	previewStarting: "正在启动页面…",
 	previewError: "页面启动失败",
 	previewStopped: "页面服务已停止",
-	draw: "画圈修改",
-	drawing: "画圈中：拖动鼠标圈出区域",
-	annotationPlaceholder: "这里要怎么改？",
-	cancel: "取消",
-	circledImage: "圈选区域",
-	captureFailed: "没能从预览里采集圈选区域，请刷新预览后重试。",
+
+	devRunning: "页面运行中",
+	devInstalling: "正在安装依赖",
+	devStarting: "正在启动页面",
+	devError: "页面启动失败",
+	devStopped: "页面服务已停止",
+	devEmpty: "还没有页面",
+	noProject: "未打开项目",
+	sessionIdle: "AI 空闲",
+	sessionBusy: "AI 处理中…",
 	disconnected: "与 s-ui 的连接已断开，请重新启动后刷新页面。",
-	language: "English",
 };
 
 const MESSAGES = { en, zh };
@@ -65,8 +165,16 @@ function initialLocale(): Locale {
 	return navigator.language.toLowerCase().startsWith("zh") ? "zh" : "en";
 }
 
+/** 失败原因的本地化文案：已知错误码用字典，其余显示后台原文。 */
+export function errorText(t: T, error: { code?: string; message: string }) {
+	return (error.code && t.errors[error.code]) || error.message;
+}
+
 export function useI18n() {
 	const [locale, setLocale] = useState(initialLocale);
+	useEffect(() => {
+		document.documentElement.lang = locale === "zh" ? "zh-CN" : "en";
+	}, [locale]);
 	const toggle = useCallback(() => {
 		setLocale((current) => {
 			const next = current === "zh" ? "en" : "zh";

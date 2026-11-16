@@ -1,5 +1,4 @@
 import { mkdir } from "node:fs/promises";
-import { homedir } from "node:os";
 import { join } from "node:path";
 import {
 	type AgentSession,
@@ -11,6 +10,7 @@ import {
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { type CircledElement, renderAnnotation } from "./annotate.ts";
+import { APP_HOME } from "./app-home.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
 import { assertUsable, type Model } from "./models.ts";
 import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
@@ -18,7 +18,7 @@ import type { Annotation, SessionEvent, Viewport } from "./protocol.ts";
 
 // 产品自己的 agent 资源目录：不加载用户 ~/.pi/agent 下的扩展、技能、SYSTEM.md 等个人定制。
 // 模型凭据仍由传入的 ModelRuntime 决定（默认读 ~/.pi/agent/auth.json）。
-const APP_AGENT_DIR = join(homedir(), ".s-ui", "agent");
+const APP_AGENT_DIR = join(APP_HOME, "agent");
 
 const DESIGNER_PROMPT = `You are the engine of s-ui, a page design workbench for people who do not write front-end code. The user sees a live preview of this project next to the chat.
 - Change the project's real source files directly and keep edits focused on what the user asked.
@@ -91,6 +91,7 @@ function toolSummary(args: Record<string, unknown> | undefined) {
  */
 export class ProjectSession {
 	readonly dir: string;
+	readonly model: Model;
 	#agent: AgentSession;
 	#dev: DevServer;
 	#appOrigins: string[];
@@ -100,8 +101,9 @@ export class ProjectSession {
 	#starting?: Promise<void>;
 	#disposed = false;
 
-	private constructor(dir: string, agent: AgentSession, appOrigins: string[]) {
+	private constructor({ dir, model }: OpenOptions, agent: AgentSession, appOrigins: string[]) {
 		this.dir = dir;
+		this.model = model;
 		this.#appOrigins = appOrigins;
 		this.#agent = agent;
 		this.#dev = new DevServer(dir);
@@ -111,7 +113,7 @@ export class ProjectSession {
 	static async open(options: OpenOptions) {
 		assertUsable(options.modelRuntime, options.model);
 		await mkdir(options.dir, { recursive: true });
-		const session = new ProjectSession(options.dir, await createAgent(options), options.appOrigins ?? []);
+		const session = new ProjectSession(options, await createAgent(options), options.appOrigins ?? []);
 		session.#ensurePreview();
 		return session;
 	}

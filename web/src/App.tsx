@@ -1,65 +1,120 @@
+import { X } from "lucide-react";
 import { useState } from "react";
 import { Chat } from "./Chat.tsx";
-import { useI18n } from "./i18n.ts";
+import { FolderPicker } from "./FolderPicker.tsx";
+import { errorText, useI18n } from "./i18n.ts";
+import { NewProjectDialog } from "./NewProjectDialog.tsx";
 import { Preview } from "./Preview.tsx";
-import { useWorkspace } from "./useWorkspace.ts";
+import { StatusBar } from "./StatusBar.tsx";
+import { Toolbar } from "./Toolbar.tsx";
+import { IconButton } from "./ui.tsx";
+import { type RequestError, useWorkspace } from "./useWorkspace.ts";
+import { Welcome } from "./Welcome.tsx";
+
+type DialogState = { kind: "open" } | { kind: "new" | "chooseParent"; parent: string; name: string };
 
 export function App() {
 	const { t, toggle } = useI18n();
-	const { state, selectModel, open, prompt, abort } = useWorkspace();
-	const [dir, setDir] = useState("");
+	const workspace = useWorkspace();
+	const { state } = workspace;
+	const [dialog, setDialog] = useState<DialogState>();
+	const [notice, setNotice] = useState("");
+	const home = state.home ?? "";
+
+	const openFolder = () => setDialog({ kind: "open" });
+	const newProject = () => setDialog({ kind: "new", parent: home, name: "" });
+	const close = () => setDialog(undefined);
+	const openProject = (dir: string) => {
+		setNotice("");
+		workspace.open(dir).catch((e: RequestError) => setNotice(errorText(t, e)));
+	};
 
 	return (
-		<div className="flex h-screen flex-col text-stone-900">
-			<header className="flex items-center gap-2 border-b border-stone-200 px-3 py-2 text-sm">
-				<strong className="mr-2">s-ui</strong>
-				<form
-					className="flex flex-1 gap-2"
-					onSubmit={(e) => {
-						e.preventDefault();
-						if (dir.trim()) open(dir);
+		<div className="flex h-full flex-col">
+			<Toolbar
+				t={t}
+				dir={state.dir}
+				home={state.home}
+				recentProjects={state.recentProjects}
+				models={state.models}
+				model={state.model}
+				sessionModel={state.sessionModel}
+				busy={state.busy}
+				onOpen={openProject}
+				onOpenFolder={openFolder}
+				onNewProject={newProject}
+				onSelectModel={workspace.selectModel}
+				onStop={workspace.abort}
+				onToggleLanguage={toggle}
+			/>
+			{notice && (
+				<p role="alert" className="flex items-center gap-2 border-b border-line bg-danger/10 px-3 py-1 text-danger">
+					<span className="flex-1">{notice}</span>
+					<IconButton label={t.cancel} onClick={() => setNotice("")} className="size-6">
+						<X size={14} />
+					</IconButton>
+				</p>
+			)}
+			{state.sessionId ? (
+				<main className="grid min-h-0 flex-1 grid-cols-[minmax(320px,28%)_minmax(0,1fr)]">
+					<Chat t={t} items={state.items} busy={state.busy} onSend={(text) => workspace.prompt(text)} onStop={workspace.abort} />
+					<Preview t={t} preview={state.preview} onAnnotate={workspace.prompt} />
+				</main>
+			) : (
+				<Welcome
+					t={t}
+					home={state.home}
+					recentProjects={state.recentProjects}
+					exampleDir={state.exampleDir}
+					onOpen={openProject}
+					onOpenFolder={openFolder}
+					onNewProject={newProject}
+				/>
+			)}
+			<StatusBar t={t} hasProject={Boolean(state.sessionId)} preview={state.preview} model={state.sessionModel} busy={state.busy} connected={state.connected} />
+
+			{dialog?.kind === "open" && (
+				<FolderPicker
+					t={t}
+					title={t.openFolderTitle}
+					confirmLabel={t.open}
+					initialPath={state.dir ?? home}
+					places={state.places}
+					listFolder={workspace.listFolder}
+					onConfirm={async (path) => {
+						await workspace.open(path);
+						close();
 					}}
-				>
-					<input
-						value={dir}
-						onChange={(e) => setDir(e.target.value)}
-						placeholder={t.folderPlaceholder}
-						className="flex-1 rounded border border-stone-300 px-2 py-1 font-mono"
-					/>
-					<button type="submit" disabled={!state.model} className="rounded bg-stone-900 px-3 text-white disabled:opacity-40">
-						{t.open}
-					</button>
-				</form>
-				{state.exampleDir && (
-					<button
-						onClick={() => {
-							setDir(state.exampleDir!);
-							open(state.exampleDir!);
-						}}
-						className="rounded px-2 py-1 text-stone-600 hover:bg-stone-100"
-					>
-						{t.openExample}
-					</button>
-				)}
-				<label className="flex items-center gap-1 text-stone-600">
-					{t.model}
-					<select value={state.model ?? ""} onChange={(e) => selectModel(e.target.value)} className="rounded border border-stone-300 px-1 py-1">
-						{state.models.map((m) => (
-							<option key={m.id} value={m.id}>
-								{m.label}
-							</option>
-						))}
-					</select>
-				</label>
-				<button onClick={toggle} className="rounded px-2 py-1 text-stone-600 hover:bg-stone-100">
-					{t.language}
-				</button>
-			</header>
-			{!state.connected && state.models.length > 0 && <p className="bg-red-50 px-3 py-1 text-sm text-red-700">{t.disconnected}</p>}
-			<main className="grid min-h-0 flex-1 grid-cols-[minmax(320px,30%)_1fr]">
-				<Chat t={t} items={state.items} busy={state.busy} enabled={Boolean(state.sessionId)} onSend={(text) => prompt(text)} onStop={abort} />
-				<Preview t={t} preview={state.preview} onAnnotate={prompt} />
-			</main>
+					onClose={close}
+				/>
+			)}
+			{dialog?.kind === "new" && (
+				<NewProjectDialog
+					t={t}
+					parent={dialog.parent}
+					name={dialog.name}
+					home={state.home}
+					onNameChange={(name) => setDialog({ ...dialog, name })}
+					onChangeParent={() => setDialog({ ...dialog, kind: "chooseParent" })}
+					onCreate={async (parent, name) => {
+						await workspace.createProject(parent, name);
+						close();
+					}}
+					onClose={close}
+				/>
+			)}
+			{dialog?.kind === "chooseParent" && (
+				<FolderPicker
+					t={t}
+					title={t.chooseLocationTitle}
+					confirmLabel={t.choose}
+					initialPath={dialog.parent}
+					places={state.places}
+					listFolder={workspace.listFolder}
+					onConfirm={(path) => setDialog({ ...dialog, kind: "new", parent: path })}
+					onClose={() => setDialog({ ...dialog, kind: "new" })}
+				/>
+			)}
 		</div>
 	);
 }
