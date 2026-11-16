@@ -1,29 +1,30 @@
 import { useRef, useState } from "react";
-import { type Annotation, PAGE_STATE_MESSAGE, type PageState, type Point } from "../../server/protocol.ts";
+import type { PageCapture } from "../../server/page-capture.ts";
+import { type Annotation, PAGE_CAPTURE_MESSAGE, type Point } from "../../server/protocol.ts";
 import type { T } from "./i18n.ts";
 import type { Preview as PreviewState } from "./useWorkspace.ts";
 
 const MIN_STROKE_POINTS = 3;
-const PAGE_STATE_TIMEOUT_MS = 2000;
+const PAGE_CAPTURE_TIMEOUT_MS = 5000;
 
-type Stroke = Omit<Annotation, "page">;
+type Stroke = Omit<Annotation, "capture">;
 
-/** 向预览里注入的桥接脚本询问当前地址和滚动位置（iframe 跨源，读不到）。 */
-function requestPageState(frame: HTMLIFrameElement, previewUrl: string) {
+/** 请预览里注入的桥接脚本在用户此刻的页面上采集圈注现场（iframe 跨源，工作台读不到）。 */
+function requestCapture(frame: HTMLIFrameElement, previewUrl: string, stroke: Point[]) {
 	const id = crypto.randomUUID();
-	return new Promise<PageState>((resolve, reject) => {
+	return new Promise<PageCapture>((resolve, reject) => {
 		const timer = setTimeout(() => {
 			removeEventListener("message", onMessage);
-			reject(new Error("page state timeout"));
-		}, PAGE_STATE_TIMEOUT_MS);
+			reject(new Error("page capture timeout"));
+		}, PAGE_CAPTURE_TIMEOUT_MS);
 		function onMessage(e: MessageEvent) {
-			if (e.source !== frame.contentWindow || e.data?.type !== PAGE_STATE_MESSAGE || e.data.id !== id) return;
+			if (e.source !== frame.contentWindow || e.data?.type !== PAGE_CAPTURE_MESSAGE || e.data.id !== id) return;
 			clearTimeout(timer);
 			removeEventListener("message", onMessage);
-			resolve(e.data.page);
+			resolve(e.data.capture);
 		}
 		addEventListener("message", onMessage);
-		frame.contentWindow!.postMessage({ type: PAGE_STATE_MESSAGE, id }, new URL(previewUrl).origin);
+		frame.contentWindow!.postMessage({ type: PAGE_CAPTURE_MESSAGE, id, stroke }, new URL(previewUrl).origin);
 	});
 }
 
@@ -119,9 +120,9 @@ export function Preview({ t, preview, onAnnotate }: { t: T; preview?: PreviewSta
 		setAnnotating(false);
 		try {
 			setError("");
-			onAnnotate(text, { ...stroke, page: await requestPageState(frame.current!, preview!.url!) });
+			onAnnotate(text, { ...stroke, capture: await requestCapture(frame.current!, preview!.url!, stroke.stroke) });
 		} catch {
-			setError(t.pageStateTimeout);
+			setError(t.captureFailed);
 		}
 	};
 

@@ -1,16 +1,19 @@
 import { createServer, request } from "node:http";
 import { connect, type AddressInfo, type Socket } from "node:net";
-import { PAGE_STATE_MESSAGE } from "./protocol.ts";
+import { capturePage } from "./page-capture.ts";
+import { PAGE_CAPTURE_MESSAGE } from "./protocol.ts";
 
 
-// 预览 iframe 与工作台不同源，工作台读不到它的地址和滚动位置；
-// 注入这段脚本，由它只向工作台页面回报当前状态。
+// 预览 iframe 与工作台不同源，工作台读不到里面的页面；注入这段脚本，
+// 只应工作台页面的请求，在用户此刻的真实页面上采集圈注现场。
 function bridgeScript(appOrigins: string[]) {
+	const type = JSON.stringify(PAGE_CAPTURE_MESSAGE);
 	return `<script>(() => {
 const allowed = ${JSON.stringify(appOrigins)};
+const capturePage = (${capturePage.toString()});
 addEventListener("message", (e) => {
-	if (e.source !== parent || !allowed.includes(e.origin) || e.data?.type !== ${JSON.stringify(PAGE_STATE_MESSAGE)}) return;
-	parent.postMessage({ type: ${JSON.stringify(PAGE_STATE_MESSAGE)}, id: e.data.id, page: { href: location.href, scrollX, scrollY } }, e.origin);
+	if (e.source !== parent || !allowed.includes(e.origin) || e.data?.type !== ${type}) return;
+	parent.postMessage({ type: ${type}, id: e.data.id, capture: capturePage(e.data.stroke) }, e.origin);
 });
 })();</script>`;
 }

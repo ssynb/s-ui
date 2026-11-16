@@ -10,7 +10,7 @@ import {
 	SessionManager,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
-import { type CircledElement, captureAnnotation } from "./annotate.ts";
+import { type CircledElement, renderAnnotation } from "./annotate.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
 import { assertUsable, type Model } from "./models.ts";
 import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
@@ -156,16 +156,10 @@ export class ProjectSession {
 	async #withAnnotation(text: string, annotation?: Annotation) {
 		if (!annotation) return { fullText: text };
 		if (this.#preview.state !== "ready" || !this.#preview.url) throw new Error("Preview is not running");
-		const { href, scrollX, scrollY } = annotation.page;
+		const { href } = annotation.capture;
 		if (new URL(href).origin !== new URL(this.#preview.url).origin) throw new Error(`Annotation page is not the preview: ${href}`);
-		const capture = await captureAnnotation({
-			url: href,
-			scroll: { x: scrollX, y: scrollY },
-			viewport: annotation.viewport,
-			stroke: annotation.stroke,
-			projectDir: this.dir,
-		});
-		return { fullText: annotationPrompt(text, capture.elements, annotation.viewport), image: capture.png.toString("base64") };
+		const result = await renderAnnotation({ ...annotation, projectDir: this.dir });
+		return { fullText: annotationPrompt(text, result.elements, annotation.viewport), image: result.png.toString("base64") };
 	}
 
 	#emit(event: SessionEvent) {

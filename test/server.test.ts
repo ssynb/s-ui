@@ -58,7 +58,7 @@ test("opening the same folder twice still delivers each session event once", asy
 	await client.until((m) => m.filter((x) => x.type === "opened").length === 2);
 	const { sessionId } = client.messages.find((m) => m.type === "opened") as Extract<ServerMessage, { type: "opened" }>;
 
-	const annotation = { stroke: [[0, 0], [10, 0], [10, 10]], viewport: { width: 100, height: 100 }, page: { href: "http://x/", scrollX: 0, scrollY: 0 } };
+	const annotation = { stroke: [[0, 0], [10, 0], [10, 10]], viewport: { width: 100, height: 100 }, capture: { href: "http://x/", scrollX: 0, scrollY: 0, html: "", elements: [] } };
 	client.ws.send(JSON.stringify({ type: "prompt", sessionId, text: "x", annotation }));
 	const isError = (m: ServerMessage) => m.type === "event" && m.event.type === "error";
 	await client.until((m) => m.some(isError));

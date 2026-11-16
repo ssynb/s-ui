@@ -1,16 +1,14 @@
 // WebSocket 协议：前端与后台之间唯一的通道。前后端共享这一份类型。
+import type { PageCapture } from "./page-capture.ts";
 
 export type Point = [x: number, y: number];
 export type Viewport = { width: number; height: number };
 
-/** 工作台向预览 iframe 查询页面状态时 postMessage 用的消息类型（请求与回复相同）。 */
-export const PAGE_STATE_MESSAGE = "s-ui:page-state";
+/** 工作台请预览 iframe 采集现场时 postMessage 用的消息类型（请求与回复相同）。 */
+export const PAGE_CAPTURE_MESSAGE = "s-ui:page-capture";
 
-/** 画圈那一刻预览页面的地址和滚动位置，由预览桥接脚本上报。 */
-export type PageState = { href: string; scrollX: number; scrollY: number };
-
-/** 用户在预览上画的圈：坐标是预览视口内的 CSS 像素。 */
-export type Annotation = { stroke: Point[]; viewport: Viewport; page: PageState };
+/** 用户在预览上画的圈：坐标是预览视口内的 CSS 像素；capture 是预览页面在画圈那一刻的现场。 */
+export type Annotation = { stroke: Point[]; viewport: Viewport; capture: PageCapture };
 
 export type PreviewState = "empty" | "installing" | "starting" | "ready" | "error" | "stopped";
 
