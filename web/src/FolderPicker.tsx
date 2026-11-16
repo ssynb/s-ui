@@ -1,5 +1,5 @@
 import { ArrowUp, ChevronRight, Folder, FolderCode, House, Monitor, FileText } from "lucide-react";
-import { useCallback, useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import type { FolderEntry, FolderListing, Place } from "../../server/protocol.ts";
 import { errorText, type T } from "./i18n.ts";
 import { Button, IconButton, Modal } from "./ui.tsx";
@@ -101,23 +101,25 @@ export function FolderPicker({ t, title, confirmLabel, initialPath, places, list
 	const [selected, setSelected] = useState<string>();
 	const [error, setError] = useState("");
 
-	const go = useCallback(
-		async (path: string) => {
-			try {
-				const next = await listFolder(path);
-				setListing(next);
-				setPathInput(next.path);
-				setSelected(next.path);
-				setError("");
-			} catch (e) {
-				setError(errorText(t, e as RequestError));
-			}
-		},
-		[listFolder, t],
-	);
+	// 只认最后一次跳转的结果：先发出的慢请求晚回来时不能把用户带回旧位置。
+	const latestGo = useRef(0);
+	const go = async (path: string) => {
+		const attempt = ++latestGo.current;
+		try {
+			const next = await listFolder(path);
+			if (attempt !== latestGo.current) return;
+			setListing(next);
+			setPathInput(next.path);
+			setSelected(next.path);
+			setError("");
+		} catch (e) {
+			if (attempt === latestGo.current) setError(errorText(t, e as RequestError));
+		}
+	};
+	// initialPath 只决定打开时的位置；之后用户浏览到哪里就停在哪里，不随父组件重渲染重置。
 	useEffect(() => {
 		go(initialPath);
-	}, [go, initialPath]);
+	}, []);
 
 	const confirm = async (path: string) => {
 		try {

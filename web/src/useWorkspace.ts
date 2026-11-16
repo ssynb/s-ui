@@ -135,17 +135,29 @@ export function useWorkspace() {
 	);
 	const { sessionId, model } = state;
 
-	return {
-		state,
-		selectModel: (m: string) => dispatch({ type: "selectModel", model: m }),
-		open: async (dir: string) => {
+	// 返回稳定的函数引用：依赖它们的组件不会因无关状态更新而重跑副作用。
+	const selectModel = useCallback((m: string) => dispatch({ type: "selectModel", model: m }), []);
+	const open = useCallback(
+		async (dir: string) => {
 			await request({ type: "open", dir, model: model! });
 		},
-		createProject: async (parent: string, name: string) => {
+		[request, model],
+	);
+	const createProject = useCallback(
+		async (parent: string, name: string) => {
 			await request({ type: "createProject", parent, name, model: model! });
 		},
-		listFolder: async (path: string) => ((await request({ type: "listFolder", path })) as Extract<ServerMessage, { type: "folder" }>).listing as FolderListing,
-		prompt: (text: string, annotation?: Annotation) => sessionId && send({ type: "prompt", sessionId, text, annotation }),
-		abort: () => sessionId && send({ type: "abort", sessionId }),
-	};
+		[request, model],
+	);
+	const listFolder = useCallback(
+		async (path: string) => ((await request({ type: "listFolder", path })) as Extract<ServerMessage, { type: "folder" }>).listing as FolderListing,
+		[request],
+	);
+	const prompt = useCallback(
+		(text: string, annotation?: Annotation) => sessionId && send({ type: "prompt", sessionId, text, annotation }),
+		[send, sessionId],
+	);
+	const abort = useCallback(() => sessionId && send({ type: "abort", sessionId }), [send, sessionId]);
+
+	return { state, selectModel, open, createProject, listFolder, prompt, abort };
 }
