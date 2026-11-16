@@ -101,7 +101,7 @@ export function FolderPicker({ t, title, confirmLabel, initialPath, places, list
 	const [selected, setSelected] = useState<string>();
 	const [error, setError] = useState("");
 
-	// 只认最后一次跳转的结果：先发出的慢请求晚回来时不能把用户带回旧位置。
+	// 只认用户最后一次的意图：先发出的慢请求晚回来时，不能把用户带回旧位置或覆盖正在输入的路径。
 	const latestGo = useRef(0);
 	const go = async (path: string) => {
 		const attempt = ++latestGo.current;
@@ -144,7 +144,10 @@ export function FolderPicker({ t, title, confirmLabel, initialPath, places, list
 				<input
 					aria-label={t.pathLabel}
 					value={pathInput}
-					onChange={(e) => setPathInput(e.target.value)}
+					onChange={(e) => {
+						latestGo.current++;
+						setPathInput(e.target.value);
+					}}
 					spellCheck={false}
 					className="h-7 min-w-0 flex-1 rounded-md bg-panel px-2 font-mono text-[12.5px] ring-1 ring-line ring-inset focus:ring-accent focus:outline-none"
 				/>
