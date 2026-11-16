@@ -74,7 +74,7 @@ async function pixelAt(png: Buffer, x: number, y: number) {
 				ctx.drawImage(img, 0, 0);
 				return [...ctx.getImageData(x, y, 1, 1).data.slice(0, 3)];
 			},
-			[x, y],
+			[x, y] as const,
 		);
 	} finally {
 		await page.close();
