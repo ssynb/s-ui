@@ -13,6 +13,7 @@ import {
 import { type CircledElement, captureAnnotation } from "./annotate.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
 import { assertUsable, type Model } from "./models.ts";
+import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
 import type { Annotation, SessionEvent, Viewport } from "./protocol.ts";
 
 // 产品自己的 agent 资源目录：不加载用户 ~/.pi/agent 下的扩展、技能、SYSTEM.md 等个人定制。
@@ -29,7 +30,13 @@ const DESIGNER_PROMPT = `You are the engine of s-ui, a page design workbench for
 type PreviewEvent = Extract<SessionEvent, { type: "preview" }>;
 type Listener = (event: SessionEvent) => void;
 
-export type OpenOptions = { dir: string; modelRuntime: ModelRuntime; model: Model };
+export type OpenOptions = {
+	dir: string;
+	modelRuntime: ModelRuntime;
+	model: Model;
+	/** 工作台页面的来源；只有它们能向预览查询页面状态。 */
+	appOrigins?: string[];
+};
 
 async function createAgent({ dir, modelRuntime, model }: OpenOptions) {
 	const settingsManager = SettingsManager.inMemory({});
@@ -86,13 +93,16 @@ export class ProjectSession {
 	readonly dir: string;
 	#agent: AgentSession;
 	#dev: DevServer;
+	#appOrigins: string[];
+	#proxy?: PreviewProxy;
 	#listeners = new Set<Listener>();
 	#preview: PreviewEvent = { type: "preview", state: "starting" };
 	#starting?: Promise<void>;
 	#disposed = false;
 
-	private constructor(dir: string, agent: AgentSession) {
+	private constructor(dir: string, agent: AgentSession, appOrigins: string[]) {
 		this.dir = dir;
+		this.#appOrigins = appOrigins;
 		this.#agent = agent;
 		this.#dev = new DevServer(dir);
 		agent.subscribe((e) => this.#onAgentEvent(e));
@@ -101,7 +111,7 @@ export class ProjectSession {
 	static async open(options: OpenOptions) {
 		assertUsable(options.modelRuntime, options.model);
 		await mkdir(options.dir, { recursive: true });
-		const session = new ProjectSession(options.dir, await createAgent(options));
+		const session = new ProjectSession(options.dir, await createAgent(options), options.appOrigins ?? []);
 		session.#ensurePreview();
 		return session;
 	}
@@ -140,12 +150,21 @@ export class ProjectSession {
 		this.#agent.dispose();
 		await this.#starting;
 		await this.#dev.stop();
+		await this.#proxy?.close();
 	}
 
 	async #withAnnotation(text: string, annotation?: Annotation) {
 		if (!annotation) return { fullText: text };
 		if (this.#preview.state !== "ready" || !this.#preview.url) throw new Error("Preview is not running");
-		const capture = await captureAnnotation({ url: this.#preview.url, projectDir: this.dir, ...annotation });
+		const { href, scrollX, scrollY } = annotation.page;
+		if (new URL(href).origin !== new URL(this.#preview.url).origin) throw new Error(`Annotation page is not the preview: ${href}`);
+		const capture = await captureAnnotation({
+			url: href,
+			scroll: { x: scrollX, y: scrollY },
+			viewport: annotation.viewport,
+			stroke: annotation.stroke,
+			projectDir: this.dir,
+		});
 		return { fullText: annotationPrompt(text, capture.elements, annotation.viewport), image: capture.png.toString("base64") };
 	}
 
@@ -184,6 +203,12 @@ export class ProjectSession {
 		});
 	}
 
+	async #onDevExit(log: string) {
+		await this.#proxy?.close();
+		this.#proxy = undefined;
+		this.#emit({ type: "preview", state: "stopped", message: log });
+	}
+
 	async #startPreview() {
 		if (!(await hasDevScript(this.dir))) return this.#emit({ type: "preview", state: "empty" });
 		try {
@@ -193,8 +218,9 @@ export class ProjectSession {
 			}
 			if (this.#disposed) return;
 			this.#emit({ type: "preview", state: "starting" });
-			const url = await this.#dev.start((log) => this.#emit({ type: "preview", state: "stopped", message: log }));
-			this.#emit({ type: "preview", state: "ready", url });
+			const devUrl = await this.#dev.start((log) => void this.#onDevExit(log));
+			this.#proxy = await startPreviewProxy(devUrl, this.#appOrigins);
+			this.#emit({ type: "preview", state: "ready", url: this.#proxy.url });
 		} catch (error) {
 			this.#emit({ type: "preview", state: "error", message: (error as Error).message });
 		}

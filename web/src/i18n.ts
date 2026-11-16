@@ -21,6 +21,7 @@ const en = {
 	annotationPlaceholder: "What should change here?",
 	cancel: "Cancel",
 	circledImage: "Circled area",
+	pageStateTimeout: "Couldn't read the preview's current position. Reload the preview and try again.",
 	disconnected: "Disconnected from s-ui. Restart it and reload this page.",
 	language: "中文",
 };
@@ -47,6 +48,7 @@ const zh: Messages = {
 	annotationPlaceholder: "这里要怎么改？",
 	cancel: "取消",
 	circledImage: "圈选区域",
+	pageStateTimeout: "读不到预览当前的位置，请刷新预览后重试。",
 	disconnected: "与 s-ui 的连接已断开，请重新启动后刷新页面。",
 	language: "English",
 };

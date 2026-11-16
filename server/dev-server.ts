@@ -72,7 +72,10 @@ export class DevServer {
 	async install() {
 		const child = spawnIn(this.dir, packageManager(this.dir), ["install"]);
 		const log = collectLog(child, () => {});
-		const code = await new Promise<number | null>((resolve) => child.on("close", resolve));
+		const code = await new Promise<number | null>((resolve, reject) => {
+			child.on("error", reject);
+			child.on("close", resolve);
+		});
 		if (code !== 0) throw failure(`install exited with ${code}`, log());
 	}
 
@@ -86,6 +89,10 @@ export class DevServer {
 		this.#child = child;
 		this.#exited = new Promise((resolve) => child.on("close", () => resolve()));
 		return new Promise<string>((resolve, reject) => {
+			child.on("error", (error) => {
+				if (this.#child === child) this.#child = undefined;
+				reject(error);
+			});
 			let url: string | undefined;
 			const log = collectLog(child, (line) => {
 				const found = url ? undefined : line.match(LOCAL_URL)?.[0];

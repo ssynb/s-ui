@@ -95,13 +95,16 @@ function drawStroke({ stroke, color }: { stroke: Point[]; color: string }) {
 	document.documentElement.append(svg);
 }
 
-/** 用与预览相同的视口打开页面，找出圈内元素并截一张带圈注的图。 */
-export async function captureAnnotation({ url, projectDir, ...annotation }: Annotation & { url: string; projectDir: string }): Promise<AnnotationCapture> {
+type CaptureOptions = Pick<Annotation, "stroke" | "viewport"> & { url: string; scroll?: { x: number; y: number }; projectDir: string };
+
+/** 用与预览相同的视口、地址和滚动位置打开页面，找出圈内元素并截一张带圈注的图。 */
+export async function captureAnnotation({ url, scroll, projectDir, ...annotation }: CaptureOptions): Promise<AnnotationCapture> {
 	// 每次单独启动无头浏览器（约 0.1 秒），不留常驻进程。
 	const browser = await chromium.launch();
 	try {
 		const page = await browser.newPage({ viewport: annotation.viewport, deviceScaleFactor: 1 });
 		await page.goto(url, { waitUntil: "networkidle" });
+		if (scroll) await page.evaluate(({ x, y }) => window.scrollTo({ left: x, top: y, behavior: "instant" }), scroll);
 		const found = await page.evaluate(findCircledElements, { stroke: annotation.stroke, maxElements: MAX_ELEMENTS, htmlLimit: HTML_LIMIT });
 		await page.evaluate(drawStroke, { stroke: annotation.stroke, color: STROKE_COLOR });
 		const png = await page.screenshot({ type: "png" });

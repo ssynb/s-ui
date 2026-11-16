@@ -1,9 +1,31 @@
 import { useRef, useState } from "react";
-import type { Annotation, Point } from "../../server/protocol.ts";
+import { type Annotation, PAGE_STATE_MESSAGE, type PageState, type Point } from "../../server/protocol.ts";
 import type { T } from "./i18n.ts";
 import type { Preview as PreviewState } from "./useWorkspace.ts";
 
 const MIN_STROKE_POINTS = 3;
+const PAGE_STATE_TIMEOUT_MS = 2000;
+
+type Stroke = Omit<Annotation, "page">;
+
+/** 向预览里注入的桥接脚本询问当前地址和滚动位置（iframe 跨源，读不到）。 */
+function requestPageState(frame: HTMLIFrameElement, previewUrl: string) {
+	const id = crypto.randomUUID();
+	return new Promise<PageState>((resolve, reject) => {
+		const timer = setTimeout(() => {
+			removeEventListener("message", onMessage);
+			reject(new Error("page state timeout"));
+		}, PAGE_STATE_TIMEOUT_MS);
+		function onMessage(e: MessageEvent) {
+			if (e.source !== frame.contentWindow || e.data?.type !== PAGE_STATE_MESSAGE || e.data.id !== id) return;
+			clearTimeout(timer);
+			removeEventListener("message", onMessage);
+			resolve(e.data.page);
+		}
+		addEventListener("message", onMessage);
+		frame.contentWindow!.postMessage({ type: PAGE_STATE_MESSAGE, id }, new URL(previewUrl).origin);
+	});
+}
 
 function statusText(t: T, preview?: PreviewState) {
 	switch (preview?.state) {
@@ -25,7 +47,7 @@ function statusText(t: T, preview?: PreviewState) {
 }
 
 /** 画圈覆盖层：在 iframe 上方记录一笔闭合手绘路径，松手后附一句话发出。 */
-function AnnotationLayer({ t, onSubmit, onCancel }: { t: T; onSubmit: (text: string, a: Annotation) => void; onCancel: () => void }) {
+function AnnotationLayer({ t, onSubmit, onCancel }: { t: T; onSubmit: (text: string, a: Stroke) => void; onCancel: () => void }) {
 	const layer = useRef<HTMLDivElement>(null);
 	const [stroke, setStroke] = useState<Point[]>([]);
 	const [drawing, setDrawing] = useState(false);
@@ -90,12 +112,24 @@ function AnnotationLayer({ t, onSubmit, onCancel }: { t: T; onSubmit: (text: str
 
 export function Preview({ t, preview, onAnnotate }: { t: T; preview?: PreviewState; onAnnotate: (text: string, a: Annotation) => void }) {
 	const [annotating, setAnnotating] = useState(false);
+	const [error, setError] = useState("");
+	const frame = useRef<HTMLIFrameElement>(null);
 	const ready = preview?.state === "ready" && preview.url;
+	const submit = async (text: string, stroke: Stroke) => {
+		setAnnotating(false);
+		try {
+			setError("");
+			onAnnotate(text, { ...stroke, page: await requestPageState(frame.current!, preview!.url!) });
+		} catch {
+			setError(t.pageStateTimeout);
+		}
+	};
 
 	return (
 		<section className="flex min-h-0 flex-col bg-stone-100">
 			<div className="flex h-10 items-center gap-3 border-b border-stone-200 bg-white px-3 text-sm">
 				<span className="truncate text-stone-500">{ready ? preview.url : ""}</span>
+				{error && <span className="truncate text-red-700">{error}</span>}
 				<button
 					disabled={!ready}
 					onClick={() => setAnnotating((a) => !a)}
@@ -106,7 +140,7 @@ export function Preview({ t, preview, onAnnotate }: { t: T; preview?: PreviewSta
 			</div>
 			<div className="relative flex-1">
 				{ready ? (
-					<iframe title="preview" src={preview.url} className="absolute inset-0 h-full w-full border-0 bg-white" />
+					<iframe ref={frame} title="preview" src={preview.url} className="absolute inset-0 h-full w-full border-0 bg-white" />
 				) : (
 					<div className="flex h-full flex-col items-center justify-center gap-2 p-8 text-center text-stone-500">
 						<p>{statusText(t, preview)}</p>
@@ -117,10 +151,7 @@ export function Preview({ t, preview, onAnnotate }: { t: T; preview?: PreviewSta
 					<AnnotationLayer
 						t={t}
 						onCancel={() => setAnnotating(false)}
-						onSubmit={(text, a) => {
-							onAnnotate(text, a);
-							setAnnotating(false);
-						}}
+						onSubmit={submit}
 					/>
 				)}
 			</div>

@@ -3,8 +3,14 @@
 export type Point = [x: number, y: number];
 export type Viewport = { width: number; height: number };
 
+/** 工作台向预览 iframe 查询页面状态时 postMessage 用的消息类型（请求与回复相同）。 */
+export const PAGE_STATE_MESSAGE = "s-ui:page-state";
+
+/** 画圈那一刻预览页面的地址和滚动位置，由预览桥接脚本上报。 */
+export type PageState = { href: string; scrollX: number; scrollY: number };
+
 /** 用户在预览上画的圈：坐标是预览视口内的 CSS 像素。 */
-export type Annotation = { stroke: Point[]; viewport: Viewport };
+export type Annotation = { stroke: Point[]; viewport: Viewport; page: PageState };
 
 export type PreviewState = "empty" | "installing" | "starting" | "ready" | "error" | "stopped";
 
