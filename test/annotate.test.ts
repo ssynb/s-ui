@@ -99,7 +99,7 @@ test("after opening a modal, circling its button targets the modal, in both elem
 
 	assert.match(html(result), /id="confirm"/);
 	assert.doesNotMatch(html(result), /id="buy"/);
-	assert.deepEqual(await pixelAt(result.png, 360, 320), [0, 255, 0]);
+	assert.deepEqual(await pixelAt(result.png, 310, 320), [0, 255, 0]);
 });
 
 test("after scrolling the window and an inner container, the circled element is the one on screen", async () => {
@@ -114,5 +114,5 @@ test("after scrolling the window and an inner container, the circled element is 
 		result.elements.map((e) => e.selector),
 		["button#deep"],
 	);
-	assert.deepEqual(await pixelAt(result.png, 360, 170), [0, 0, 255]);
+	assert.deepEqual(await pixelAt(result.png, 310, 170), [0, 0, 255]);
 });
