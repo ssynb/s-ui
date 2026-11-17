@@ -56,6 +56,10 @@ test("organizing runs only while the chat AI is idle, and chat messages are refu
 
 	release();
 	await organizing;
+	const idle = new Promise<void>((resolve) => {
+		const off = session.subscribe((e) => e.type === "busy" && !e.busy && (off(), resolve()));
+	});
 	await session.prompt("change the header");
+	await idle;
 	assert.equal(llm.requests.length, 1);
 });

@@ -42,7 +42,8 @@ test("if organizing changes how the page looks and the AI cannot fix it, every c
 	const llm = await startFakeLlm(await mkdtemp(join(tmpdir(), "s-ui-pi-")), {}, respond);
 	t.after(llm.close);
 
-	const result = await organizeTokens({ dir, model: llm.modelRuntime.getModel("fake", "fake-1")!, previewUrl }, llm.modelRuntime, () => {});
+	const exclusive = <T>(_task: string, fn: () => Promise<T>) => fn();
+	const result = await organizeTokens({ dir, model: llm.modelRuntime.getModel("fake", "fake-1")!, previewUrl, exclusive }, llm.modelRuntime, () => {});
 
 	assert.equal(result.appearanceUnchanged, false);
 	assert.equal(result.organized, false);

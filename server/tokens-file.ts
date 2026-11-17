@@ -7,8 +7,24 @@ import type { PolishStatus } from "./modules/polish.ts";
 
 const TOKEN_NAMES = new Set<string>(DESIGN_TOKENS.map((t) => t.name));
 const IMPORT_LINE = /^\s*@import\s+url\(\s*["']?([^"')]+)["']?\s*\)\s*;?\s*$/;
-// 值只能是一条声明的值：不能带 ; { } 或换行，否则会改出文件里别的规则。
-const SAFE_VALUE = /^[^;{}<>\n\r]{1,200}$/;
+const MAX_VALUE_LENGTH = 200;
+// 会越出这条声明、改动文件其余部分的写法：结束声明或规则、开始或结束注释、转义、换行。
+const ESCAPES_DECLARATION = /[;{}<>\\\n\r]|\/\*|\*\//;
+
+/** 值必须完整地待在一条声明里：没有越界字符，引号成对，括号配平。 */
+function isSafeValue(value: string) {
+	if (!value.trim() || value.length > MAX_VALUE_LENGTH || ESCAPES_DECLARATION.test(value)) return false;
+	let quote: string | undefined;
+	let depth = 0;
+	for (const ch of value) {
+		if (quote) {
+			if (ch === quote) quote = undefined;
+		} else if (ch === '"' || ch === "'") quote = ch;
+		else if (ch === "(") depth++;
+		else if (ch === ")" && --depth < 0) return false;
+	}
+	return !quote && depth === 0;
+}
 const SAFE_IMPORT = /^https:\/\/[^\s"'()]+$/;
 
 function escapeRegExp(s: string) {
@@ -52,7 +68,7 @@ export async function saveTokens(dir: string, values: TokenValues, fontImports?:
 	if (!status.organized) throw new Error(`Design tokens are not organized yet (${TOKENS_FILE})`);
 	for (const [name, value] of Object.entries(values)) {
 		if (!TOKEN_NAMES.has(name)) throw new Error(`Unknown design token: ${name}`);
-		if (!SAFE_VALUE.test(value!)) throw new Error(`Invalid value for ${name}`);
+		if (!isSafeValue(value!)) throw new Error(`Invalid value for ${name}`);
 	}
 	for (const url of fontImports ?? []) {
 		if (!SAFE_IMPORT.test(url)) throw new Error(`Font imports must be https URLs: ${url}`);

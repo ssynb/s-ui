@@ -22,7 +22,8 @@ async function project(tokens?: string) {
 		await mkdir(join(dir, "src"));
 		await writeFile(join(dir, TOKENS_FILE), tokens);
 	}
-	const ctx = { project: { dir }, progress: () => {} } as unknown as ModuleContext;
+	const exclusive = <T>(_task: string, fn: () => Promise<T>) => fn();
+	const ctx = { project: { dir, exclusive }, progress: () => {} } as unknown as ModuleContext;
 	const call = (action: string, payload: unknown = {}) => dispatchModule(MODULES, { module: "polish", action, payload }, ctx) as Promise<any>;
 	return { dir, call };
 }

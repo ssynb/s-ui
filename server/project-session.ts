@@ -62,6 +62,8 @@ export class ProjectSession {
 	#conversations: (ConversationInfo & { path: string })[] = [];
 	/** 所有要用到当前 pi 会话的操作（发消息、换模型、新建/切换对话）排队执行，避免用到正被替换的会话。 */
 	#queue: Promise<unknown> = Promise.resolve();
+	/** 正在独占改项目文件的任务（如整理设计变量）；期间对话消息会被拒绝，避免两边同时改文件。 */
+	#exclusive?: string;
 	#dev: DevServer;
 	#appOrigins: string[];
 	#proxy?: PreviewProxy;
@@ -120,12 +122,30 @@ export class ProjectSession {
 			const { fullText, image } = await this.#withAnnotation(text, annotation);
 			const all = [...(image ? [{ data: image, mimeType: "image/png" as const }] : []), ...images];
 			await this.#serialized(() => {
+				if (this.#exclusive) throw new Error(`Busy ${this.#exclusive}; send your message when it finishes`);
 				this.#emit({ type: "user", text, images: all.map((i) => `data:${i.mimeType};base64,${i.data}`) });
 				recordDisplayText(this.#agent, text);
 				return this.#dispatch(fullText, all);
 			});
 		} catch (error) {
 			this.#emit({ type: "error", message: (error as Error).message });
+		}
+	}
+
+	/**
+	 * 独占项目文件执行一个任务（如整理设计变量）：对话 AI 正在工作或已有独占任务时拒绝；
+	 * 执行期间对话消息被拒绝，任务的改动因此只来自它自己。
+	 */
+	async runExclusive<T>(task: string, fn: () => Promise<T>) {
+		await this.#serialized(async () => {
+			if (this.#exclusive) throw new Error(`Busy ${this.#exclusive}; try again when it finishes`);
+			if (this.#agent.isStreaming) throw new Error(`The AI is working on the project; ${task} when it finishes`);
+			this.#exclusive = task;
+		});
+		try {
+			return await fn();
+		} finally {
+			this.#exclusive = undefined;
 		}
 	}
 

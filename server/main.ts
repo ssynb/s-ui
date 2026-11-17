@@ -102,7 +102,12 @@ function connect(ws: WebSocket) {
 			const session = msg.sessionId ? sessionsById.get(msg.sessionId) : undefined;
 			const ctx = {
 				modelRuntime,
-				project: session && { dir: session.dir, model: session.model, previewUrl: session.previewUrl },
+				project: session && {
+					dir: session.dir,
+					model: session.model,
+					previewUrl: session.previewUrl,
+					exclusive: <T>(task: string, fn: () => Promise<T>) => session.runExclusive(task, fn),
+				},
 				progress: (data: unknown) => send({ type: "moduleProgress", requestId: msg.requestId, data }),
 			};
 			return send({ type: "moduleResult", requestId: msg.requestId, result: await dispatchModule(MODULES, msg, ctx) });

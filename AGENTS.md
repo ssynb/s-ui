@@ -12,9 +12,9 @@ Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建
 - `server/annotate.ts`：Playwright 以相同视口渲染快照、还原弹窗与滚动、画圈截图，并给圈内元素补源码位置。
 - `server/source-locator.ts`：按 id、文本、class 在项目源码里猜元素位置。
 - `server/projects.ts`：最近项目（持久化到 `~/.s-ui/config.json`）、列目录（供应用内文件夹选择框）、新建项目文件夹、示例项目副本（`prepareExample`：首次复制到 `APP_HOME/examples/`，之后复用，仓库里的示例不被改动）；`server/app-home.ts` 定义 s-ui 自己的目录（默认 `~/.s-ui`，`S_UI_HOME` 可覆盖）。
-- `server/modules.ts`：后台功能模块注册表；`server/module-kit.ts`：模块工具（`defineModule`、`dispatchModule`、`ModuleContext`）；`server/modules/<名>.ts`：各模块（如 `references.ts`），声明自己的 `<名>Api` 类型。前端经 `{ type: "module", module, action, payload }` 调用，main.ts 只转发。
+- `server/modules.ts`：后台功能模块注册表；`server/module-kit.ts`：模块工具（`defineModule`、`dispatchModule`、`ModuleContext`；会改项目文件的模块动作用 `ctx.project.exclusive` 包起来，对应 `ProjectSession.runExclusive`：对话 AI 工作时拒绝，执行期间对话消息被拒绝）；`server/modules/<名>.ts`：各模块（如 `references.ts`），声明自己的 `<名>Api` 类型。前端经 `{ type: "module", module, action, payload }` 调用，main.ts 只转发。
 - `server/design-tokens.ts`：设计变量约定（前后端共用）：`TOKENS_FILE`（`src/design-tokens.css`）与 `DESIGN_TOKENS`（`--sui-font-*`、`--sui-color-*`、`--sui-radius-*`、`--sui-shadow-*`、`--sui-space`）。「打磨」只改这些变量。
-- `server/modules/polish.ts`：「打磨」后台模块，`PolishApi`：`status`（变量文件状态与当前值）、`organize`（一次性 AI 子会话把散落样式收拢成设计变量，外观不变，推进度）、`saveTokens`（确定性写回变量值与字体 @import，不经 AI）。实现分在 `server/tokens-file.ts`（解析与确定性改写，拒绝会越出声明的值和非 https 的字体地址）与 `server/organize-tokens.ts`（AI 整理；整理前后整页截图比对，外观变了先请 AI 对照截图修一次，仍不一致就撤销全部改动）；截图与比对在 `server/appearance.ts`。
+- `server/modules/polish.ts`：「打磨」后台模块，`PolishApi`：`status`（变量文件状态与当前值）、`organize`（一次性 AI 子会话把散落样式收拢成设计变量，外观不变，推进度）、`saveTokens`（确定性写回变量值与字体 @import，不经 AI）。实现分在 `server/tokens-file.ts`（解析与确定性改写，拒绝会越出声明的值——结束符、注释、转义、未闭合的引号或括号——和非 https 的字体地址）与 `server/organize-tokens.ts`（AI 整理；独占项目执行，整理前后整页截图比对，外观变了先请 AI 对照截图修一次，仍不一致或中途失败都撤销全部改动）；截图与比对在 `server/appearance.ts`。
 - `server/page-inspect.ts`：在预览页面里识别实际存在的组件（类别、数量、代表/成组选择器、关键计算样式）、字体与颜色；`inspectPage` 自包含，经桥接脚本执行；类型 `PageInspection` 为契约。
 - `server/models.ts`：可用模型列表与默认模型；拒绝 Claude 订阅 OAuth（pi-ai 在该凭据下会伪装成 Claude Code）。
 - `web/src/useWorkspace.ts`：WebSocket 连接与界面状态归约；带 `requestId` 的命令（打开、新建、列目录）可等待结果。

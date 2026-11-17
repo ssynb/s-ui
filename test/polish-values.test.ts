@@ -14,7 +14,7 @@ test("values that would open a comment, an unclosed string or bracket are refuse
 	await writeFile(join(dir, TOKENS_FILE), FILE);
 
 	for (const bad of ["red/*", "red */", '"Inter', "rgb(1, 2, 3", "red)", "a\\9", "url(x) }"]) {
-		await assert.rejects(saveTokens(dir, { "--sui-color-primary": bad }), undefined, bad);
+		await assert.rejects(saveTokens(dir, { "--sui-color-primary": bad }), Error, bad);
 	}
 	assert.equal(await readFile(join(dir, TOKENS_FILE), "utf8"), FILE);
 

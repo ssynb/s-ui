@@ -31,7 +31,7 @@ Find what broke (often a missing brace or semicolon, a wrong variable, or a chan
 
 const UNDONE_SUMMARY = "Organizing changed how the page looks and could not be fixed, so every change was undone.";
 
-type Project = { dir: string; model: Model; previewUrl?: string };
+type Project = { dir: string; model: Model; previewUrl?: string; exclusive: <T>(task: string, fn: () => Promise<T>) => Promise<T> };
 type Progress = (data: OrganizeProgress) => void;
 
 /** 项目源文件的内容快照（相对路径 → 内容），用来找出并在需要时撤销 AI 的改动。 */
@@ -99,12 +99,23 @@ async function organizeAndVerify(project: Project, modelRuntime: ModelRuntime, p
 	}
 }
 
-export async function organizeTokens(project: Project, modelRuntime: ModelRuntime, progress: Progress): Promise<OrganizeResult> {
-	const status = await readTokensStatus(project.dir);
-	if (status.organized) return { ...status, changedFiles: [], summary: "Design tokens are already organized." };
+/**
+ * 整理设计变量。独占项目文件执行（对话 AI 不会同时改文件），所以整理前后的差异都出自整理本身；
+ * 中途任何失败都把项目恢复到整理前再报错。
+ */
+export function organizeTokens(project: Project, modelRuntime: ModelRuntime, progress: Progress): Promise<OrganizeResult> {
+	return project.exclusive("organizing design tokens", async () => {
+		const status = await readTokensStatus(project.dir);
+		if (status.organized) return { ...status, changedFiles: [], summary: "Design tokens are already organized." };
 
-	const before = await snapshot(project.dir);
-	const { summary, appearanceUnchanged } = await organizeAndVerify(project, modelRuntime, progress, before);
-	const changed = changedFiles(before, await snapshot(project.dir));
-	return { ...(await readTokensStatus(project.dir)), changedFiles: changed, appearanceUnchanged, summary };
+		const before = await snapshot(project.dir);
+		try {
+			const { summary, appearanceUnchanged } = await organizeAndVerify(project, modelRuntime, progress, before);
+			const changed = changedFiles(before, await snapshot(project.dir));
+			return { ...(await readTokensStatus(project.dir)), changedFiles: changed, appearanceUnchanged, summary };
+		} catch (error) {
+			await restore(project.dir, before, await snapshot(project.dir));
+			throw error;
+		}
+	});
 }
