@@ -1,14 +1,16 @@
-import { type FormEvent, useState } from "react";
+import { type FormEvent, useEffect, useState } from "react";
 import type { StartFromReferenceProps } from "../panels.ts";
 import { Button, Spinner } from "../ui.tsx";
 import { CuratedTab } from "./CuratedTab.tsx";
 import type { RefCard } from "./ReferenceCard.tsx";
 import { type OpenCard, ReferenceViewer, type ViewerAction } from "./ReferenceViewer.tsx";
 import { SimilarTab } from "./SimilarTab.tsx";
-import { useSimilarSearch } from "./similarSearch.ts";
+import { lastDescription, useSimilarSearch, useStartPageOpen } from "./similarSearch.ts";
 import { STRINGS } from "./strings.ts";
 
 type Tab = "similar" | "curated";
+/** “照这个做”这一轮：已发出 → AI 开始处理 → 结束后回到空闲。 */
+type Build = "idle" | "sent" | "working";
 
 /**
  * 空项目时预览区显示的内容（契约见 panels.ts 的 StartFromReferenceProps）：先选一个参考定基调。
@@ -17,7 +19,13 @@ type Tab = "similar" | "curated";
 export function StartFromReference({ panel, defaultMessage }: StartFromReferenceProps) {
 	const s = STRINGS[panel.locale];
 	const similar = useSimilarSearch(panel);
-	const [description, setDescription] = useState("");
+	useStartPageOpen(panel.project.dir);
+	const [description, setDescription] = useState(() => lastDescription(panel.project.dir));
+	const [build, setBuild] = useState<Build>("idle");
+	useEffect(() => {
+		if (build === "sent" && panel.busy) setBuild("working");
+		if (build === "working" && !panel.busy) setBuild("idle");
+	}, [build, panel.busy]);
 	const [tab, setTab] = useState<Tab>(similar.search.state === "idle" ? "curated" : "similar");
 	const [open, setOpen] = useState<OpenCard>();
 	const onOpen = (card: RefCard) => card.image && setOpen({ ...card, image: card.image });
@@ -31,8 +39,9 @@ export function StartFromReference({ panel, defaultMessage }: StartFromReference
 		find();
 	};
 
-	const build: ViewerAction = {
+	const buildAction: ViewerAction = {
 		label: s.buildThis,
+		onSubmitted: () => setBuild("sent"),
 		compose: ({ name, url, image }, aspects) => ({
 			text: s.build({ name, url, aspects, description: description.trim() }),
 			images: [{ data: image, mimeType: "image/jpeg" }],
@@ -47,7 +56,7 @@ export function StartFromReference({ panel, defaultMessage }: StartFromReference
 				<h2 className="text-lg font-semibold text-balance">{s.startTitle}</h2>
 				<p className="max-w-2xl text-muted text-pretty">{s.startHint}</p>
 			</div>
-			{panel.busy && (
+			{build !== "idle" && (
 				<p role="status" className="flex items-center gap-2 text-muted">
 					<Spinner />
 					{s.building}
@@ -85,7 +94,7 @@ export function StartFromReference({ panel, defaultMessage }: StartFromReference
 				{tab === "similar" ? <SimilarTab panel={panel} onOpen={onOpen} onFind={find} /> : <CuratedTab panel={panel} onOpen={onOpen} />}
 			</div>
 			<p className="text-xs text-muted">{defaultMessage}</p>
-			{open && <ReferenceViewer {...panel} card={open} action={build} onClose={() => setOpen(undefined)} />}
+			{open && <ReferenceViewer {...panel} card={open} action={buildAction} onClose={() => setOpen(undefined)} />}
 		</div>
 	);
 }

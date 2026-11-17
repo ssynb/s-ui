@@ -9,7 +9,7 @@ import { ASPECTS, type Aspect, STRINGS } from "./strings.ts";
 export type OpenCard = RefCard & { image: string };
 
 /** 大图里的主按钮：文案和交给 AI 的内容。默认是「参考这个」改当前页面（有圈选时只改圈选部分）。 */
-export type ViewerAction = { label: string; compose: (card: OpenCard, aspects: Aspect[]) => AiSubmission };
+export type ViewerAction = { label: string; compose: (card: OpenCard, aspects: Aspect[]) => AiSubmission; onSubmitted?: () => void };
 
 type Props = PanelProps & { card: OpenCard; onClose: () => void; action?: ViewerAction };
 
@@ -39,10 +39,11 @@ export function ReferenceViewer({ card, onClose, action, locale, selection, call
 			withSelection: Boolean(selection),
 		}),
 	};
-	const { label, compose } = action ?? restyle;
+	const { label, compose, onSubmitted } = action ?? restyle;
 
 	const submit = () => {
 		submitToAi(compose(card, ASPECTS.filter((a) => aspects.has(a))));
+		onSubmitted?.();
 		showChat();
 		onClose();
 	};

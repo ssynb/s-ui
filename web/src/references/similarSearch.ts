@@ -1,4 +1,4 @@
-import { useSyncExternalStore } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { FindProgress, FindResult, ProductGuess, ReferencesApi } from "../../../server/modules/references.ts";
 import type { PanelProps } from "../panels.ts";
 import type { RefCard } from "./ReferenceCard.tsx";
@@ -14,6 +14,9 @@ export type Search =
 
 const IDLE: Search = { state: "idle" };
 const searches = new Map<string, Search>();
+// 空项目里按描述查找时记下描述；起步页开着（项目还没有页面）时，别处的“重新查找”也沿用它，而不是去读空项目。
+const descriptions = new Map<string, string>();
+const startPageOpen = new Set<string>();
 const listeners = new Set<() => void>();
 
 function set(dir: string, update: (current: Search) => Search) {
@@ -35,13 +38,28 @@ function subscribe(listener: () => void) {
 	};
 }
 
-/** 当前项目的找同类状态，以及发起查找（不给描述时读项目，给了按描述）。 */
+/** 起步页挂载期间登记“这个项目还没有页面”。 */
+export function useStartPageOpen(dir: string) {
+	useEffect(() => {
+		startPageOpen.add(dir);
+		return () => {
+			startPageOpen.delete(dir);
+		};
+	}, [dir]);
+}
+
+/** 上次按描述查找用的描述（起步页恢复输入框用）。 */
+export const lastDescription = (dir: string) => descriptions.get(dir) ?? "";
+
+/** 当前项目的找同类状态，以及发起查找：给了描述按描述；不给时项目还没有页面就沿用上次的描述，否则读项目。 */
 export function useSimilarSearch({ project, locale, callModule }: PanelProps) {
 	const dir = project.dir;
 	const search = useSyncExternalStore(subscribe, () => searches.get(dir) ?? IDLE);
 
-	const find = (description?: string) => {
+	const find = (given?: string) => {
 		if (searches.get(dir)?.state === "running") return;
+		if (given?.trim()) descriptions.set(dir, given.trim());
+		const description = given?.trim() || (startPageOpen.has(dir) ? descriptions.get(dir) : undefined);
 		set(dir, () => ({ state: "running", done: 0, kept: [] }));
 		callModule<ReferencesApi, "findSimilar">("references", "findSimilar", { locale, description }, {
 			onProgress: (data) => set(dir, (current) => reduceProgress(current, data as FindProgress)),
