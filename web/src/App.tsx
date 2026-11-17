@@ -1,20 +1,19 @@
 import { X } from "lucide-react";
 import { useState } from "react";
-import { Chat } from "./Chat.tsx";
 import { FolderPicker } from "./FolderPicker.tsx";
 import { errorText, useI18n } from "./i18n.ts";
 import { NewProjectDialog } from "./NewProjectDialog.tsx";
-import { Preview } from "./Preview.tsx";
 import { StatusBar } from "./StatusBar.tsx";
 import { Toolbar } from "./Toolbar.tsx";
 import { IconButton } from "./ui.tsx";
 import { type RequestError, useWorkspace } from "./useWorkspace.ts";
 import { Welcome } from "./Welcome.tsx";
+import { Workspace } from "./Workspace.tsx";
 
 type DialogState = { kind: "open" } | { kind: "new" | "chooseParent"; parent: string; name: string };
 
 export function App() {
-	const { t, toggle } = useI18n();
+	const { t, locale, toggle } = useI18n();
 	const workspace = useWorkspace();
 	const { state } = workspace;
 	const [dialog, setDialog] = useState<DialogState>();
@@ -56,10 +55,7 @@ export function App() {
 				</p>
 			)}
 			{state.sessionId ? (
-				<main className="grid min-h-0 flex-1 grid-cols-[minmax(320px,28%)_minmax(0,1fr)]">
-					<Chat t={t} items={state.items} busy={state.busy} onSend={(text) => workspace.prompt(text)} onStop={workspace.abort} />
-					<Preview t={t} preview={state.preview} onAnnotate={workspace.prompt} />
-				</main>
+				<Workspace key={state.sessionId} t={t} locale={locale} workspace={workspace} />
 			) : (
 				<Welcome
 					t={t}

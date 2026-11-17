@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useState } from "react";
 
-// 全部界面文案的唯一来源。新增文案时两种语言同时补齐，类型会检查缺漏。
+// 框架界面文案的唯一来源（各工具窗面板的文案在各自目录的 strings.ts）。新增文案时两种语言同时补齐，类型会检查缺漏。
 const en = {
 	tagline: "Design web pages by chatting and circling",
 	chooseProject: "Choose project",
@@ -48,7 +48,8 @@ const en = {
 	stop: "Stop",
 	sendHint: "Enter to send · Shift+Enter for a new line",
 	toolsSummary: (n: number) => (n === 1 ? "Ran 1 action" : `Ran ${n} actions`),
-	circledImage: "Circled area",
+	attachedImage: "Attached image",
+	toolWindows: "Tool windows",
 
 	previewTab: "Preview",
 	reload: "Reload preview",
@@ -125,7 +126,8 @@ const zh: Messages = {
 	stop: "停止",
 	sendHint: "Enter 发送 · Shift+Enter 换行",
 	toolsSummary: (n: number) => `执行了 ${n} 个操作`,
-	circledImage: "圈选区域",
+	attachedImage: "附带的图片",
+	toolWindows: "工具窗",
 
 	previewTab: "预览",
 	reload: "刷新预览",

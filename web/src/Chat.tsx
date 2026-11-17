@@ -60,7 +60,9 @@ function Message({ t, item }: { t: T; item: Exclude<ChatItem, ToolItem> }) {
 		case "user":
 			return (
 				<div className="rounded-lg bg-hover/70 px-3 py-2">
-					{item.image && <img src={item.image} alt={t.circledImage} className="mb-2 rounded-md ring-1 ring-line" />}
+					{item.images.map((src, i) => (
+						<img key={i} src={src} alt={t.attachedImage} className="mb-2 rounded-md ring-1 ring-line" />
+					))}
 					<p className="whitespace-pre-wrap">{item.text}</p>
 				</div>
 			);
@@ -111,10 +113,7 @@ export function Chat({ t, items, busy, onSend, onStop }: ChatProps) {
 	};
 
 	return (
-		<section aria-labelledby="chat-title" className="flex min-h-0 flex-col border-r border-line bg-app">
-			<h2 id="chat-title" className="flex h-9 shrink-0 items-center px-3 font-semibold">
-				{t.chatTitle}
-			</h2>
+		<div className="flex min-h-0 flex-1 flex-col">
 			<div ref={scroller.ref} onScroll={scroller.onScroll} className="flex min-h-0 flex-1 flex-col gap-3 overflow-y-auto px-3 pb-3">
 				{toBlocks(items).map((block, i) =>
 					block.kind === "tools" ? <ToolGroup key={i} t={t} tools={block.tools} /> : <Message key={i} t={t} item={block.item} />,
@@ -155,6 +154,6 @@ export function Chat({ t, items, busy, onSend, onStop }: ChatProps) {
 					)}
 				</div>
 			</form>
-		</section>
+		</div>
 	);
 }

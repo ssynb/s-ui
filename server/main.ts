@@ -14,6 +14,7 @@ import { createServer as createViteServer } from "vite";
 import { WebSocketServer, type WebSocket } from "ws";
 import { DEFAULT_MODEL, listUsableModels, modelKey } from "./models.ts";
 import { APP_HOME } from "./app-home.ts";
+import { dispatchModule, MODULES } from "./modules.ts";
 import { ProjectSession } from "./project-session.ts";
 import { createProjectFolder, listFolder, RecentProjects } from "./projects.ts";
 import type { ClientMessage, Place, ServerMessage } from "./protocol.ts";
@@ -93,9 +94,18 @@ function connect(ws: WebSocket) {
 		}
 		if (msg.type === "createProject") return open(msg.requestId, await createProjectFolder(expandDir(msg.parent), msg.name), msg.model);
 		if (msg.type === "listFolder") return send({ type: "folder", requestId: msg.requestId, listing: await listFolder(expandDir(msg.path)) });
+		if (msg.type === "module") {
+			const session = msg.sessionId ? sessionsById.get(msg.sessionId) : undefined;
+			const ctx = {
+				modelRuntime,
+				project: session && { dir: session.dir, model: session.model },
+				progress: (data: unknown) => send({ type: "moduleProgress", requestId: msg.requestId, data }),
+			};
+			return send({ type: "moduleResult", requestId: msg.requestId, result: await dispatchModule(MODULES, msg, ctx) });
+		}
 		const session = sessionsById.get(msg.sessionId);
 		if (!session) throw new Error(`Unknown session: ${msg.sessionId}`);
-		if (msg.type === "prompt") return session.prompt(msg.text, msg.annotation);
+		if (msg.type === "prompt") return session.prompt(msg.text, { annotation: msg.annotation, images: msg.images });
 		if (msg.type === "abort") return session.abort();
 	};
 	ws.on("message", (data) => {

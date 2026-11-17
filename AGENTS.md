@@ -10,11 +10,15 @@ Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建
 - `server/annotate.ts`：Playwright 以相同视口渲染快照、还原弹窗与滚动、画圈截图，并给圈内元素补源码位置。
 - `server/source-locator.ts`：按 id、文本、class 在项目源码里猜元素位置。
 - `server/projects.ts`：最近项目（持久化到 `~/.s-ui/config.json`）、列目录（供应用内文件夹选择框）、新建项目文件夹；`server/app-home.ts` 定义 s-ui 自己的目录（默认 `~/.s-ui`，`S_UI_HOME` 可覆盖）。
+- `server/modules.ts`：后台功能模块注册表；`server/module-kit.ts`：模块工具（`defineModule`、`dispatchModule`、`ModuleContext`）；`server/modules/<名>.ts`：各模块（如 `references.ts`），声明自己的 `<名>Api` 类型。前端经 `{ type: "module", module, action, payload }` 调用，main.ts 只转发。
 - `server/models.ts`：可用模型列表与默认模型；拒绝 Claude 订阅 OAuth（pi-ai 在该凭据下会伪装成 Claude Code）。
 - `web/src/useWorkspace.ts`：WebSocket 连接与界面状态归约；带 `requestId` 的命令（打开、新建、列目录）可等待结果。
-- `web/src/i18n.ts`：全部界面文案（中英）的唯一来源。
+- `web/src/i18n.ts`：框架文案（中英）的唯一来源。**每个工具窗拥有自己的文案字典**（`web/src/<面板>/strings.ts`，结构同 i18n.ts：`en` 定型、`zh: typeof en`），框架文案在 i18n.ts。
 - `web/src/styles.css`：设计 token（参照 JetBrains 新 UI，浅色/深色跟随系统）；`web/src/ui.tsx`：共享控件（按钮、菜单、模态框、项目图标），密度统一为 compact。
-- `web/src/App.tsx` 组装：`Toolbar.tsx`（项目切换、模型、语言、运行状态）、`Welcome.tsx`（未打开项目时）、`Chat.tsx`（对话工具窗，Markdown、工具调用折叠）、`Preview.tsx`（标签栏、地址条、画圈覆盖层）、`StatusBar.tsx`、`FolderPicker.tsx`、`NewProjectDialog.tsx`。
+- `web/src/panels.ts`：工具窗面板契约（冻结）——`PanelDefinition`、`PanelProps`（语言、项目信息、圈选上下文、`submitToAi` 统一交给 AI、`showChat`、`callModule` 调后台模块）。
+- `web/src/ToolWindows.tsx`：JetBrains 式左侧工具窗条与工具窗注册表（对话为内置默认）；`web/src/Workspace.tsx`：打开项目后的工作区，持有圈选与当前工具窗，组装 `PanelProps`。
+- `web/src/library/`、`web/src/references/`：「组件库」「参考页面」工具窗，各含 `index.ts`（PanelDefinition）、面板组件、`strings.ts`。
+- `web/src/App.tsx` 组装：`Toolbar.tsx`（项目切换、模型、语言、运行状态）、`Welcome.tsx`（未打开项目时）、`Workspace.tsx`、`Chat.tsx`（对话工具窗，Markdown、工具调用折叠）、`Preview.tsx`（标签栏、地址条、画圈覆盖层；松手即采集现场成为圈选）、`StatusBar.tsx`、`FolderPicker.tsx`、`NewProjectDialog.tsx`。
 - `examples/hello-page/`：最小示例项目。
 - `test/`：验收测试，`npm test` 运行（需要网络安装示例依赖、已安装 Playwright Chromium）。
 

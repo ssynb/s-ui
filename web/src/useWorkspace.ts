@@ -1,8 +1,9 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { Annotation, ClientMessage, FolderListing, ModelInfo, Place, SessionEvent, ServerMessage } from "../../server/protocol.ts";
+import type { Annotation, ClientMessage, FolderListing, ImageAttachment, ModelInfo, Place, SessionEvent, ServerMessage } from "../../server/protocol.ts";
+import type { CallModule } from "./panels.ts";
 
 export type ChatItem =
-	| { kind: "user"; text: string; image?: string }
+	| { kind: "user"; text: string; images: string[] }
 	| { kind: "assistant"; text: string; streaming: boolean }
 	| { kind: "tool"; id: string; name: string; summary: string; status: "running" | "done" | "error" }
 	| { kind: "error"; text: string };
@@ -49,7 +50,7 @@ function applySessionEvent(state: State, e: SessionEvent): State {
 		case "busy":
 			return { ...state, busy: e.busy };
 		case "user":
-			return { ...state, items: [...state.items, { kind: "user", text: e.text, image: e.image }] };
+			return { ...state, items: [...state.items, { kind: "user", text: e.text, images: e.images }] };
 		case "assistant_delta":
 			return { ...state, items: applyAssistantDelta(state.items, e.text) };
 		case "assistant_end":
@@ -85,6 +86,8 @@ function reducer(state: State, action: Action): State {
 		case "event":
 			return action.sessionId === state.sessionId ? applySessionEvent(state, action.event) : state;
 		case "folder":
+		case "moduleProgress":
+		case "moduleResult":
 			return state;
 		case "error":
 			// 带 requestId 的失败由发起请求的地方显示；其余进对话流。
@@ -92,7 +95,7 @@ function reducer(state: State, action: Action): State {
 	}
 }
 
-type Pending = { resolve: (msg: ServerMessage) => void; reject: (error: RequestError) => void };
+type Pending = { resolve: (msg: ServerMessage) => void; reject: (error: RequestError) => void; onProgress?: (data: unknown) => void };
 type Request = ClientMessage extends infer M ? (M extends { requestId: string } ? Omit<M, "requestId"> : never) : never;
 
 /** 与后台的唯一通道：一条 WebSocket，进来的是事件流，出去的是命令；带 requestId 的命令可等待结果。 */
@@ -110,6 +113,7 @@ export function useWorkspace() {
 			const msg = JSON.parse(m.data) as ServerMessage;
 			const requestId = "requestId" in msg ? msg.requestId : undefined;
 			const waiter = requestId ? pending.current.get(requestId) : undefined;
+			if (msg.type === "moduleProgress") return waiter?.onProgress?.(msg.data);
 			if (waiter) {
 				pending.current.delete(requestId!);
 				if (msg.type === "error") waiter.reject({ code: msg.code, message: msg.message });
@@ -125,10 +129,10 @@ export function useWorkspace() {
 
 	const send = useCallback((msg: ClientMessage) => socket.current?.send(JSON.stringify(msg)), []);
 	const request = useCallback(
-		(msg: Request) =>
+		(msg: Request, onProgress?: (data: unknown) => void) =>
 			new Promise<ServerMessage>((resolve, reject) => {
 				const requestId = crypto.randomUUID();
-				pending.current.set(requestId, { resolve, reject });
+				pending.current.set(requestId, { resolve, reject, onProgress });
 				send({ ...msg, requestId } as ClientMessage);
 			}),
 		[send],
@@ -154,10 +158,18 @@ export function useWorkspace() {
 		[request],
 	);
 	const prompt = useCallback(
-		(text: string, annotation?: Annotation) => sessionId && send({ type: "prompt", sessionId, text, annotation }),
+		(text: string, { annotation, images }: { annotation?: Annotation; images?: ImageAttachment[] } = {}) =>
+			sessionId && send({ type: "prompt", sessionId, text, annotation, images }),
 		[send, sessionId],
 	);
 	const abort = useCallback(() => sessionId && send({ type: "abort", sessionId }), [send, sessionId]);
+	const callModule = useCallback<CallModule>(
+		async (module, action, payload, options) => {
+			const msg = await request({ type: "module", sessionId, module, action, payload }, options?.onProgress);
+			return (msg as Extract<ServerMessage, { type: "moduleResult" }>).result as never;
+		},
+		[request, sessionId],
+	);
 
-	return { state, selectModel, open, createProject, listFolder, prompt, abort };
+	return { state, selectModel, open, createProject, listFolder, prompt, abort, callModule };
 }

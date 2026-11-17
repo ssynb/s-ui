@@ -56,12 +56,23 @@ function PreviewStatus({ t, preview }: { t: T; preview: PreviewState }) {
 	);
 }
 
-/** 画圈覆盖层：在 iframe 上方记录一笔闭合手绘路径，松手后附一句话发出；再按下会重画。 */
-function AnnotationLayer({ t, onSubmit, onExit }: { t: T; onSubmit: (text: string, a: Stroke) => void; onExit: () => void }) {
+type LayerProps = {
+	t: T;
+	/** 已画好的圈：正在采集现场的或已采集完成的。 */
+	shown?: Stroke;
+	/** 现场已采集完、可以发送。 */
+	ready: boolean;
+	onStroke: (stroke: Stroke) => void;
+	onSubmit: (text: string) => void;
+	onExit: () => void;
+};
+
+/** 画圈覆盖层：在 iframe 上方记录一笔闭合手绘路径；松手即成为当前圈选，可附一句话发出，再按下会重画。 */
+function AnnotationLayer({ t, shown, ready, onStroke, onSubmit, onExit }: LayerProps) {
 	const layer = useRef<HTMLDivElement>(null);
-	const [stroke, setStroke] = useState<Point[]>([]);
-	const [drawing, setDrawing] = useState(false);
+	const [drawing, setDrawing] = useState<Point[]>();
 	const [text, setText] = useState("");
+	const stroke = drawing ?? shown?.stroke ?? [];
 	const done = !drawing && stroke.length >= MIN_STROKE_POINTS;
 
 	useEffect(() => {
@@ -74,9 +85,12 @@ function AnnotationLayer({ t, onSubmit, onExit }: { t: T; onSubmit: (text: strin
 		const r = layer.current!.getBoundingClientRect();
 		return [Math.round(e.clientX - r.left), Math.round(e.clientY - r.top)];
 	};
-	const submit = () => {
+	const finish = () => {
+		const points = drawing;
+		setDrawing(undefined);
+		if (!points || points.length < MIN_STROKE_POINTS) return;
 		const { width, height } = layer.current!.getBoundingClientRect();
-		onSubmit(text.trim(), { stroke, viewport: { width: Math.round(width), height: Math.round(height) } });
+		onStroke({ stroke: points, viewport: { width: Math.round(width), height: Math.round(height) } });
 	};
 	const [maxX, maxY] = stroke.reduce(([x, y], [px, py]) => [Math.max(x, px), Math.max(y, py)], [0, 0]);
 	const width = layer.current?.clientWidth ?? 0;
@@ -88,11 +102,10 @@ function AnnotationLayer({ t, onSubmit, onExit }: { t: T; onSubmit: (text: strin
 			className="absolute inset-0 cursor-crosshair touch-none ring-2 ring-accent ring-inset"
 			onPointerDown={(e) => {
 				e.currentTarget.setPointerCapture(e.pointerId);
-				setDrawing(true);
-				setStroke([pointOf(e)]);
+				setDrawing([pointOf(e)]);
 			}}
-			onPointerMove={(e) => drawing && setStroke((s) => [...s, pointOf(e)])}
-			onPointerUp={() => setDrawing(false)}
+			onPointerMove={(e) => drawing && setDrawing([...drawing, pointOf(e)])}
+			onPointerUp={finish}
 		>
 			<svg className="pointer-events-none absolute inset-0 h-full w-full">
 				<polygon points={stroke.map((p) => p.join(",")).join(" ")} fill={`${STROKE_COLOR}14`} stroke={STROKE_COLOR} strokeWidth={3} strokeLinejoin="round" />
@@ -118,7 +131,7 @@ function AnnotationLayer({ t, onSubmit, onExit }: { t: T; onSubmit: (text: strin
 					onPointerDown={(e) => e.stopPropagation()}
 					onSubmit={(e) => {
 						e.preventDefault();
-						if (text.trim()) submit();
+						if (text.trim() && ready) onSubmit(text.trim());
 					}}
 				>
 					<input
@@ -129,8 +142,8 @@ function AnnotationLayer({ t, onSubmit, onExit }: { t: T; onSubmit: (text: strin
 						placeholder={t.annotationPlaceholder}
 						className="h-7 min-w-0 flex-1 rounded-md bg-panel px-2 ring-1 ring-line ring-inset placeholder:text-faint focus:ring-accent focus:outline-none"
 					/>
-					<Button type="submit" variant="primary" disabled={!text.trim()}>
-						{t.send}
+					<Button type="submit" variant="primary" disabled={!text.trim() || !ready}>
+						{ready ? t.send : <Spinner />}
 					</Button>
 					<IconButton label={t.exitDraw} onClick={onExit}>
 						<X size={14} />
@@ -141,26 +154,46 @@ function AnnotationLayer({ t, onSubmit, onExit }: { t: T; onSubmit: (text: strin
 	);
 }
 
-type PreviewProps = { t: T; preview?: PreviewState; onAnnotate: (text: string, a: Annotation) => void };
+type PreviewProps = {
+	t: T;
+	preview?: PreviewState;
+	/** 当前圈选（含画圈那一刻的页面现场），由上层持有，工具窗面板也能用。 */
+	selection?: Annotation;
+	onSelectionChange: (selection?: Annotation) => void;
+	/** 在画圈弹框里写了一句话并发送。 */
+	onSubmitSelection: (text: string) => void;
+};
 
-export function Preview({ t, preview, onAnnotate }: PreviewProps) {
+export function Preview({ t, preview, selection, onSelectionChange, onSubmitSelection }: PreviewProps) {
 	const [annotating, setAnnotating] = useState(false);
+	const [capturing, setCapturing] = useState<Stroke>();
 	const [error, setError] = useState("");
 	const [reloads, setReloads] = useState(0);
 	const frame = useRef<HTMLIFrameElement>(null);
+	const latestCapture = useRef(0);
 	const url = preview?.state === "ready" ? preview.url : undefined;
-	const exit = useRef(() => setAnnotating(false)).current;
 
-	const submit = async (text: string, stroke: Stroke) => {
-		setAnnotating(false);
+	// 松手就采集现场：圈选应反映画圈那一刻的页面，而不是发送时的。
+	const capture = async (stroke: Stroke) => {
+		const attempt = ++latestCapture.current;
+		setCapturing(stroke);
+		setError("");
+		onSelectionChange(undefined);
 		try {
-			setError("");
-			onAnnotate(text, { ...stroke, capture: await requestCapture(frame.current!, url!, stroke.stroke) });
+			const captured = await requestCapture(frame.current!, url!, stroke.stroke);
+			if (attempt === latestCapture.current) onSelectionChange({ ...stroke, capture: captured });
 		} catch {
-			setError(t.captureFailed);
+			if (attempt === latestCapture.current) setError(t.captureFailed);
+		} finally {
+			if (attempt === latestCapture.current) setCapturing(undefined);
 		}
 	};
-
+	const exit = () => {
+		latestCapture.current++;
+		setAnnotating(false);
+		setCapturing(undefined);
+		onSelectionChange(undefined);
+	};
 	return (
 		<section aria-label={t.previewTab} className="flex min-h-0 flex-col bg-panel">
 			<div role="tablist" className="flex h-9 shrink-0 items-end border-b border-line bg-app px-1">
@@ -180,7 +213,7 @@ export function Preview({ t, preview, onAnnotate }: PreviewProps) {
 					variant={annotating ? "primary" : "default"}
 					aria-pressed={annotating}
 					disabled={!url}
-					onClick={() => setAnnotating((a) => !a)}
+					onClick={() => (annotating ? exit() : setAnnotating(true))}
 					className="ml-1"
 				>
 					{annotating ? <X size={14} /> : <MousePointer2 size={14} />}
@@ -201,7 +234,19 @@ export function Preview({ t, preview, onAnnotate }: PreviewProps) {
 				) : (
 					preview && <PreviewStatus t={t} preview={preview} />
 				)}
-				{url && annotating && <AnnotationLayer t={t} onExit={exit} onSubmit={submit} />}
+				{url && annotating && (
+					<AnnotationLayer
+						t={t}
+						shown={capturing ?? selection}
+						ready={Boolean(selection) && !capturing}
+						onStroke={capture}
+						onExit={exit}
+						onSubmit={(text) => {
+							onSubmitSelection(text);
+							setAnnotating(false);
+						}}
+					/>
+				)}
 			</div>
 		</section>
 	);

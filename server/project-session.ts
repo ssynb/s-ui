@@ -14,7 +14,7 @@ import { APP_HOME } from "./app-home.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
 import { assertUsable, type Model } from "./models.ts";
 import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
-import type { Annotation, SessionEvent, Viewport } from "./protocol.ts";
+import { type Annotation, IMAGE_MIME_TYPES, type ImageAttachment, type SessionEvent, type Viewport } from "./protocol.ts";
 
 // 产品自己的 agent 资源目录：不加载用户 ~/.pi/agent 下的扩展、技能、SYSTEM.md 等个人定制。
 // 模型凭据仍由传入的 ModelRuntime 决定（默认读 ~/.pi/agent/auth.json）。
@@ -127,13 +127,17 @@ export class ProjectSession {
 		};
 	}
 
-	/** 发一条消息；带圈注时先截图并找出圈内元素。失败以 error 事件报告。 */
-	async prompt(text: string, annotation?: Annotation) {
+	/** 发一条消息，可附图片；带圈注时先渲染圈注截图并找出圈内元素。失败以 error 事件报告。 */
+	async prompt(text: string, { annotation, images = [] }: { annotation?: Annotation; images?: ImageAttachment[] } = {}) {
 		try {
+			for (const image of images) {
+				if (!IMAGE_MIME_TYPES.includes(image.mimeType)) throw new Error(`Unsupported image type: ${image.mimeType}`);
+			}
 			const { fullText, image } = await this.#withAnnotation(text, annotation);
-			this.#emit({ type: "user", text, image: image && `data:image/png;base64,${image}` });
+			const all = [...(image ? [{ data: image, mimeType: "image/png" as const }] : []), ...images];
+			this.#emit({ type: "user", text, images: all.map((i) => `data:${i.mimeType};base64,${i.data}`) });
 			await this.#agent.prompt(fullText, {
-				images: image ? [{ type: "image", data: image, mimeType: "image/png" }] : undefined,
+				images: all.length ? all.map((i) => ({ type: "image" as const, ...i })) : undefined,
 				streamingBehavior: this.#agent.isStreaming ? "followUp" : undefined,
 			});
 		} catch (error) {
