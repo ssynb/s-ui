@@ -57,3 +57,27 @@ test("the folder picker keeps where the user browsed to when unrelated updates a
 	assert.equal(await path.inputValue(), browsed);
 	await page.close();
 });
+
+test("switching tool windows keeps the chat draft, and each tool window shows its own panel", async () => {
+	const project = await mkdtemp(join(tmpdir(), "s-ui-panels-"));
+	const page = await browser.newPage({ locale: "en-US" });
+	await page.goto(URL);
+	await page.getByRole("button", { name: "Open folder…" }).click();
+	const path = page.getByRole("textbox", { name: "Folder path" });
+	await path.fill(project);
+	await path.press("Enter");
+	await page.getByRole("tree", { name: project }).waitFor();
+	await page.getByRole("button", { name: "Open", exact: true }).click();
+
+	const draft = page.getByRole("textbox", { name: "Describe the page you want, or what to change…" });
+	await draft.fill("make the header sticky");
+	await page.getByRole("tab", { name: "Component library" }).click();
+	await page.getByRole("tabpanel", { name: "Component library" }).waitFor();
+	assert.equal(await draft.isVisible(), false);
+	await page.getByRole("tab", { name: "Reference pages" }).click();
+	await page.getByRole("tabpanel", { name: "Reference pages" }).waitFor();
+	await page.getByRole("tab", { name: "AI chat" }).click();
+
+	assert.equal(await draft.inputValue(), "make the header sticky");
+	await page.close();
+});
