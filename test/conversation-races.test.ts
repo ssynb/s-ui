@@ -14,6 +14,7 @@ async function openSession(t: TestContext) {
 	const llm = await startFakeLlm(piDir);
 	t.after(llm.close);
 	const session = await ProjectSession.open({ dir: project, modelRuntime: llm.modelRuntime, model: llm.modelRuntime.getModel("fake", "fake-1")!, sessionsDir });
+	t.after(() => session.dispose());
 	return { llm, session };
 }
 

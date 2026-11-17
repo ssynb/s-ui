@@ -29,13 +29,14 @@ function nextEvent(session: ProjectSession, match: (e: SessionEvent) => boolean,
 	});
 }
 
-test("opening an existing front-end project installs deps, starts its dev server and stops it on dispose", async () => {
+test("opening an existing front-end project installs deps, starts its dev server and stops it on dispose", async (t) => {
 	const dir = await mkdtemp(join(tmpdir(), "s-ui-project-"));
 	await cp(EXAMPLE, dir, { recursive: true, filter: (src) => !src.includes("node_modules") });
 	const modelRuntime = await runtimeWithAuth({ openai: { type: "api_key", key: "sk-test" } });
 	const model = modelRuntime.getModel("openai", "gpt-4o")!;
 
 	const session = await ProjectSession.open({ dir, modelRuntime, model });
+	t.after(() => session.dispose());
 	const ready = await nextEvent(session, (e) => e.type === "preview" && (e.state === "ready" || e.state === "error"), 180_000);
 	assert.equal(ready.type === "preview" && ready.state, "ready", JSON.stringify(ready));
 	const url = (ready as Extract<SessionEvent, { type: "preview" }>).url!;
