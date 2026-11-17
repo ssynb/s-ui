@@ -11,21 +11,23 @@ const MAX_VALUE_LENGTH = 200;
 // 会越出这条声明、改动文件其余部分的写法：结束声明或规则、开始或结束注释、转义、换行。
 const ESCAPES_DECLARATION = /[;{}<>\\\n\r]|\/\*|\*\//;
 
-/** 值必须完整地待在一条声明里：没有越界字符，引号成对，括号配平。 */
+const SAFE_IMPORT = /^https:\/\/[^\s"'()]+$/;
+const CLOSERS: Record<string, string> = { ")": "(", "]": "[" };
+
+/** 值必须完整地待在一条声明里：没有越界字符，引号成对，圆括号与方括号按嵌套配平（花括号已整体拒绝）。 */
 function isSafeValue(value: string) {
 	if (!value.trim() || value.length > MAX_VALUE_LENGTH || ESCAPES_DECLARATION.test(value)) return false;
 	let quote: string | undefined;
-	let depth = 0;
+	const open: string[] = [];
 	for (const ch of value) {
 		if (quote) {
 			if (ch === quote) quote = undefined;
 		} else if (ch === '"' || ch === "'") quote = ch;
-		else if (ch === "(") depth++;
-		else if (ch === ")" && --depth < 0) return false;
+		else if (ch === "(" || ch === "[") open.push(ch);
+		else if (ch in CLOSERS && open.pop() !== CLOSERS[ch]) return false;
 	}
-	return !quote && depth === 0;
+	return !quote && open.length === 0;
 }
-const SAFE_IMPORT = /^https:\/\/[^\s"'()]+$/;
 
 function escapeRegExp(s: string) {
 	return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
