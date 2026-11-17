@@ -16,11 +16,12 @@ const PAGES: Record<string, { status: number; html: string }> = {
 		status: 200,
 		html: `<title>Acme — Ship faster</title><h1>Ship faster with Acme</h1><p>${"The platform teams use to build and ship great products. ".repeat(20)}</p>`,
 	},
-	"/missing": { status: 404, html: "<title>404</title><h1>Not Found</h1>" },
-	"/soft-404": { status: 200, html: "<title>Page not found</title><h1>Sorry, we couldn't find that page</h1>" },
-	"/login": {
+	// 错误页和登录页都带足够的正文，确保是被各自的规则识别，而不是被当成空页。
+	"/missing": { status: 404, html: `<title>Acme</title><h1>Acme</h1><p>${"Browse our products, read the docs or contact support for help. ".repeat(3)}</p>` },
+	"/soft-404": { status: 200, html: `<title>Page not found</title><h1>Sorry, we couldn't find that page</h1><p>${"Browse our products, read the docs or contact support for help. ".repeat(3)}</p>` },
+	"/welcome": {
 		status: 200,
-		html: `<title>Sign in</title><form><h1>Sign in to continue</h1><input name="email"><input type="password" name="pw"><button>Sign in</button></form>`,
+		html: `<title>Acme</title><form><h1>Welcome back</h1><p>${"Browse our products, read the docs or contact support for help. ".repeat(3)}</p><input name="email"><input type="password" name="pw"><button>Continue</button></form>`,
 	},
 };
 
@@ -37,7 +38,7 @@ before(async () => {
 after(() => server.close());
 
 const ctx = { progress: () => {} } as unknown as ModuleContext;
-type Capture = { ok: true; url: string; title: string; image: string } | { ok: false; url: string; reason: string };
+type Capture = { ok: true; url: string; title: string; image: string } | { ok: false; url: string; reason: string; detail: string };
 const capture = (url: string) => dispatchModule(MODULES, { module: "references", action: "capture", payload: { url } }, ctx) as Promise<Capture>;
 const isJpeg = (base64: string) => Buffer.from(base64, "base64").subarray(0, 3).equals(Buffer.from([0xff, 0xd8, 0xff]));
 
@@ -47,12 +48,13 @@ test("a real page is captured as a screenshot; unreachable, error and login-wall
 	assert.ok(good.ok && isJpeg(good.image));
 	assert.equal(good.ok && good.title, "Acme — Ship faster");
 
-	for (const path of ["/missing", "/soft-404", "/login"]) {
+	const dropped = { "/missing": "http-error", "/soft-404": "error-page", "/welcome": "login" };
+	for (const [path, reason] of Object.entries(dropped)) {
 		const bad = await capture(`${base}${path}`);
-		assert.equal(bad.ok, false, `${path} should be dropped`);
+		assert.equal(bad.ok ? "kept" : bad.reason, reason, `${path} should be dropped as ${reason}`);
 	}
 	const unreachable = await capture("http://127.0.0.1:9/");
-	assert.equal(unreachable.ok, false);
+	assert.equal(unreachable.ok ? "kept" : unreachable.reason, "unreachable");
 });
 
 test("a page captured once is served from the cache without opening the site again", async () => {
