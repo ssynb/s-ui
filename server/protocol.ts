@@ -20,8 +20,16 @@ export type ModuleApi = Record<string, { payload: unknown; result: unknown }>;
 
 export type PreviewState = "empty" | "installing" | "starting" | "ready" | "error" | "stopped";
 
-/** 单个项目会话发出的事件。 */
+/** 项目里的一次对话（pi 会话）。 */
+export type ConversationInfo = { id: string; title: string; updatedAt: number };
+
+/** 单个项目会话发出的事件。订阅时会先重放：conversation、当前对话内容、conversations、model、preview、busy。 */
 export type SessionEvent =
+	/** 之后的对话内容属于这个对话；界面据此清空再重建。 */
+	| { type: "conversation"; id: string }
+	| { type: "conversations"; list: ConversationInfo[] }
+	/** 当前使用的模型（provider/id），切换后下一条消息起生效。 */
+	| { type: "model"; model: string }
 	| { type: "preview"; state: PreviewState; url?: string; message?: string }
 	| { type: "user"; text: string; images: string[] }
 	| { type: "assistant_delta"; text: string }
@@ -35,8 +43,8 @@ export type ModelInfo = { id: string; label: string };
 export type FolderEntry = { name: string; path: string; isProject: boolean };
 export type FolderListing = { path: string; parent: string | null; entries: FolderEntry[] };
 
-/** 常用位置的快捷入口；key 由界面翻译成名字。 */
-export type Place = { key: "home" | "desktop" | "documents"; path: string };
+/** 常用位置的快捷入口；key 由界面翻译成名字，盘符（Windows）直接显示路径。 */
+export type Place = { key: "home" | "desktop" | "documents" | "drive"; path: string };
 
 // 带 requestId 的命令，结果（opened / folder / moduleResult）或失败（error）回带同一个 requestId。
 export type ClientMessage =
@@ -45,7 +53,10 @@ export type ClientMessage =
 	| { type: "listFolder"; requestId: string; path: string }
 	| { type: "prompt"; sessionId: string; text: string; annotation?: Annotation; images?: ImageAttachment[] }
 	| { type: "module"; requestId: string; sessionId?: string; module: string; action: string; payload: unknown }
-	| { type: "abort"; sessionId: string };
+	| { type: "abort"; sessionId: string }
+	| { type: "setModel"; sessionId: string; model: string }
+	| { type: "newConversation"; sessionId: string }
+	| { type: "switchConversation"; sessionId: string; conversationId: string };
 
 export type ServerMessage =
 	| { type: "hello"; models: ModelInfo[]; defaultModel?: string; exampleDir: string; home: string; places: Place[]; recentProjects: string[] }

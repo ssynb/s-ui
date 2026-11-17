@@ -16,8 +16,8 @@ import { DEFAULT_MODEL, listUsableModels, modelKey } from "./models.ts";
 import { APP_HOME } from "./app-home.ts";
 import { dispatchModule, MODULES } from "./modules.ts";
 import { ProjectSession } from "./project-session.ts";
-import { createProjectFolder, listFolder, RecentProjects } from "./projects.ts";
-import type { ClientMessage, Place, ServerMessage } from "./protocol.ts";
+import { commonPlaces, createProjectFolder, listFolder, RecentProjects } from "./projects.ts";
+import type { ClientMessage, ServerMessage } from "./protocol.ts";
 
 const WEB_ROOT = new URL("../web", import.meta.url).pathname;
 const EXAMPLE_DIR = new URL("../examples/hello-page", import.meta.url).pathname;
@@ -29,11 +29,7 @@ const { values: flags } = parseArgs({
 const modelRuntime = await ModelRuntime.create();
 const recentProjects = await RecentProjects.load(join(APP_HOME, "config.json"));
 const HOME = homedir();
-const PLACES: Place[] = [
-	{ key: "home", path: HOME },
-	{ key: "desktop", path: join(HOME, "Desktop") },
-	{ key: "documents", path: join(HOME, "Documents") },
-].filter((p): p is Place => existsSync(p.path));
+const PLACES = commonPlaces(HOME);
 type OpenedSession = { id: string; session: ProjectSession };
 // 每个文件夹只有一个会话；存 Promise 让并发的 open 共享同一次创建。
 const sessionsByDir = new Map<string, Promise<OpenedSession>>();
@@ -53,9 +49,14 @@ function broadcast(msg: ServerMessage) {
 	for (const client of wss.clients) client.send(JSON.stringify(msg));
 }
 
-async function createSession(dir: string, modelId: string): Promise<OpenedSession> {
+async function usableModel(modelId: string) {
 	const model = (await listUsableModels(modelRuntime)).find((m) => modelKey(m) === modelId);
 	if (!model) throw new Error(`Model not available: ${modelId}`);
+	return model;
+}
+
+async function createSession(dir: string, modelId: string): Promise<OpenedSession> {
+	const model = await usableModel(modelId);
 	const opened = { id: randomUUID(), session: await ProjectSession.open({ dir, modelRuntime, model, appOrigins }) };
 	sessionsById.set(opened.id, opened.session);
 	return opened;
@@ -107,6 +108,9 @@ function connect(ws: WebSocket) {
 		if (!session) throw new Error(`Unknown session: ${msg.sessionId}`);
 		if (msg.type === "prompt") return session.prompt(msg.text, { annotation: msg.annotation, images: msg.images });
 		if (msg.type === "abort") return session.abort();
+		if (msg.type === "setModel") return session.setModel(await usableModel(msg.model));
+		if (msg.type === "newConversation") return session.newConversation();
+		if (msg.type === "switchConversation") return session.switchConversation(msg.conversationId);
 	};
 	ws.on("message", (data) => {
 		let requestId: string | undefined;

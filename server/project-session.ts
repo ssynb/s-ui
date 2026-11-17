@@ -1,31 +1,20 @@
 import { mkdir } from "node:fs/promises";
 import { join } from "node:path";
-import {
-	type AgentSession,
-	type AgentSessionEvent,
-	createAgentSession,
-	DefaultResourceLoader,
-	type ModelRuntime,
-	SessionManager,
-	SettingsManager,
-} from "@earendil-works/pi-coding-agent";
+import { type AgentSession, type AgentSessionEvent, type ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { type CircledElement, renderAnnotation } from "./annotate.ts";
-import { APP_HOME } from "./app-home.ts";
+import {
+	conversationsDir,
+	createAgent,
+	DEFAULT_SESSIONS_DIR,
+	listConversations,
+	recordDisplayText,
+	toolSummary,
+	transcriptOf,
+} from "./conversations.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
-import { assertUsable, type Model } from "./models.ts";
+import { assertUsable, isUsable, type Model, modelKey } from "./models.ts";
 import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
-import { type Annotation, IMAGE_MIME_TYPES, type ImageAttachment, type SessionEvent, type Viewport } from "./protocol.ts";
-
-// 产品自己的 agent 资源目录：不加载用户 ~/.pi/agent 下的扩展、技能、SYSTEM.md 等个人定制。
-// 模型凭据仍由传入的 ModelRuntime 决定（默认读 ~/.pi/agent/auth.json）。
-const APP_AGENT_DIR = join(APP_HOME, "agent");
-
-const DESIGNER_PROMPT = `You are the engine of s-ui, a page design workbench for people who do not write front-end code. The user sees a live preview of this project next to the chat.
-- Change the project's real source files directly and keep edits focused on what the user asked.
-- The host app installs dependencies and runs the dev server itself. Never start a dev server or any long-running process.
-- If the folder has no package.json and the user asks for a page, scaffold a minimal Vite project by writing files: package.json with {"type":"module","scripts":{"dev":"vite"},"devDependencies":{"vite":"^8"}}, index.html, src/main.js and src/style.css. Use plain HTML/CSS/JS unless the user asks for a framework. Do not run interactive scaffolders.
-- If you add dependencies to an existing package.json, run the project's package manager install command.
-- Reply briefly in the user's language. Do not paste code unless asked.`;
+import { type Annotation, type ConversationInfo, IMAGE_MIME_TYPES, type ImageAttachment, type SessionEvent, type Viewport } from "./protocol.ts";
 
 type PreviewEvent = Extract<SessionEvent, { type: "preview" }>;
 type Listener = (event: SessionEvent) => void;
@@ -36,33 +25,11 @@ export type OpenOptions = {
 	model: Model;
 	/** 工作台页面的来源；只有它们能向预览查询页面状态。 */
 	appOrigins?: string[];
+	/** 对话记录的根目录，每个项目在其下有自己的子目录。默认在 s-ui 自己的目录里。 */
+	sessionsDir?: string;
 };
 
-async function createAgent({ dir, modelRuntime, model }: OpenOptions) {
-	const settingsManager = SettingsManager.inMemory({});
-	const resourceLoader = new DefaultResourceLoader({
-		cwd: dir,
-		agentDir: APP_AGENT_DIR,
-		settingsManager,
-		noExtensions: true,
-		noSkills: true,
-		noPromptTemplates: true,
-		noThemes: true,
-		appendSystemPrompt: [DESIGNER_PROMPT],
-	});
-	await resourceLoader.reload();
-	const { session } = await createAgentSession({
-		cwd: dir,
-		agentDir: APP_AGENT_DIR,
-		modelRuntime,
-		model,
-		thinkingLevel: "low",
-		resourceLoader,
-		settingsManager,
-		sessionManager: SessionManager.inMemory(dir),
-	});
-	return session;
-}
+const CHAT_EVENTS = new Set<SessionEvent["type"]>(["user", "assistant_delta", "assistant_end", "tool", "error"]);
 
 function describeElements(elements: CircledElement[]) {
 	return elements
@@ -80,19 +47,20 @@ ${describeElements(elements) || "(none detected)"}
 Change the project's source code to fulfil the request.`;
 }
 
-function toolSummary(args: Record<string, unknown> | undefined) {
-	const value = args?.path ?? args?.command ?? "";
-	return String(value).slice(0, 120);
-}
-
 /**
- * 一个项目文件夹的会话：拥有一个 pi 会话和该项目 dev server 进程的完整生命周期。
- * 外界只通过 prompt / subscribe / dispose 与它交互。
+ * 一个项目文件夹的会话：拥有该项目的对话（pi 持久化会话，可新建、切换）和 dev server 进程的完整生命周期。
+ * 外界只通过 prompt / setModel / newConversation / switchConversation / subscribe / abort / dispose 与它交互。
  */
 export class ProjectSession {
 	readonly dir: string;
-	readonly model: Model;
-	#agent: AgentSession;
+	#modelRuntime: ModelRuntime;
+	#conversationsDir: string;
+	#agent!: AgentSession;
+	#offAgent?: () => void;
+	/** 当前对话在界面上的内容，订阅时重放；连续的文字增量合并成一条。 */
+	#transcript: SessionEvent[] = [];
+	#conversations: (ConversationInfo & { path: string })[] = [];
+	#switching: Promise<void> = Promise.resolve();
 	#dev: DevServer;
 	#appOrigins: string[];
 	#proxy?: PreviewProxy;
@@ -101,27 +69,35 @@ export class ProjectSession {
 	#starting?: Promise<void>;
 	#disposed = false;
 
-	private constructor({ dir, model }: OpenOptions, agent: AgentSession, appOrigins: string[]) {
-		this.dir = dir;
-		this.model = model;
-		this.#appOrigins = appOrigins;
-		this.#agent = agent;
-		this.#dev = new DevServer(dir);
-		agent.subscribe((e) => this.#onAgentEvent(e));
+	private constructor(options: OpenOptions) {
+		this.dir = options.dir;
+		this.#modelRuntime = options.modelRuntime;
+		this.#conversationsDir = conversationsDir(options.sessionsDir ?? DEFAULT_SESSIONS_DIR, options.dir);
+		this.#appOrigins = options.appOrigins ?? [];
+		this.#dev = new DevServer(options.dir);
 	}
 
+	/** 打开项目：接着上次最近的对话，没有就新开一个。 */
 	static async open(options: OpenOptions) {
 		assertUsable(options.modelRuntime, options.model);
 		await mkdir(options.dir, { recursive: true });
-		const session = new ProjectSession(options, await createAgent(options), options.appOrigins ?? []);
+		const session = new ProjectSession(options);
+		const recent = (await listConversations(options.dir, session.#conversationsDir))[0];
+		await session.#attach(recent ? SessionManager.open(recent.path, session.#conversationsDir) : session.#newSessionManager(), options.model);
 		session.#ensurePreview();
 		return session;
 	}
 
-	/** 订阅事件；订阅时立即收到当前预览状态。 */
+	get model() {
+		return this.#agent.model as Model;
+	}
+
+	/** 订阅事件；订阅时先重放当前对话、对话列表、模型、预览和运行状态。 */
 	subscribe(listener: Listener) {
 		this.#listeners.add(listener);
+		for (const event of this.#snapshot()) listener(event);
 		listener(this.#preview);
+		if (this.#agent.isStreaming) listener({ type: "busy", busy: true });
 		return () => {
 			this.#listeners.delete(listener);
 		};
@@ -136,6 +112,7 @@ export class ProjectSession {
 			const { fullText, image } = await this.#withAnnotation(text, annotation);
 			const all = [...(image ? [{ data: image, mimeType: "image/png" as const }] : []), ...images];
 			this.#emit({ type: "user", text, images: all.map((i) => `data:${i.mimeType};base64,${i.data}`) });
+			recordDisplayText(this.#agent, text);
 			await this.#agent.prompt(fullText, {
 				images: all.length ? all.map((i) => ({ type: "image" as const, ...i })) : undefined,
 				streamingBehavior: this.#agent.isStreaming ? "followUp" : undefined,
@@ -145,6 +122,26 @@ export class ProjectSession {
 		}
 	}
 
+	/** 换模型：当前对话从下一条消息起使用它，并记进对话记录。 */
+	async setModel(model: Model) {
+		assertUsable(this.#modelRuntime, model);
+		await this.#agent.setModel(model);
+		this.#emit({ type: "model", model: modelKey(model) });
+	}
+
+	/** 开一个空的新对话；旧对话保留在列表里。 */
+	newConversation() {
+		return this.#replaceConversation(() => this.#newSessionManager());
+	}
+
+	switchConversation(id: string) {
+		return this.#replaceConversation(() => {
+			const target = this.#conversations.find((c) => c.id === id);
+			if (!target) throw new Error(`Unknown conversation: ${id}`);
+			return SessionManager.open(target.path, this.#conversationsDir);
+		});
+	}
+
 	abort() {
 		return this.#agent.abort();
 	}
@@ -152,11 +149,50 @@ export class ProjectSession {
 	async dispose() {
 		this.#disposed = true;
 		this.#listeners.clear();
+		await this.#switching;
 		await this.#agent.abort();
+		this.#offAgent?.();
 		this.#agent.dispose();
 		await this.#starting;
 		await this.#dev.stop();
 		await this.#proxy?.close();
+	}
+
+	#newSessionManager() {
+		return SessionManager.create(this.dir, this.#conversationsDir);
+	}
+
+	/** 接上一个对话：新对话用 fallbackModel；旧对话沿用记录里的模型，除非它已不可用。 */
+	async #attach(sessionManager: SessionManager, fallbackModel: Model) {
+		const restored = sessionManager.getEntryCount() > 0;
+		const agent = await createAgent({ dir: this.dir, modelRuntime: this.#modelRuntime, sessionManager, model: restored ? undefined : fallbackModel });
+		if (!agent.model || !isUsable(this.#modelRuntime, agent.model as Model)) await agent.setModel(fallbackModel);
+		this.#agent = agent;
+		this.#offAgent = agent.subscribe((e) => this.#onAgentEvent(e));
+		this.#transcript = transcriptOf(agent);
+		this.#conversations = await listConversations(this.dir, this.#conversationsDir);
+	}
+
+	// 串行执行：同时点两次切换时，后一次在前一次完成后再换。
+	#replaceConversation(next: () => SessionManager) {
+		this.#switching = this.#switching.then(async () => {
+			const model = this.model;
+			await this.#agent.abort();
+			this.#offAgent?.();
+			this.#agent.dispose();
+			await this.#attach(next(), model);
+			for (const event of this.#snapshot()) this.#broadcast(event);
+		});
+		return this.#switching;
+	}
+
+	#snapshot(): SessionEvent[] {
+		return [
+			{ type: "conversation", id: this.#agent.sessionId },
+			...this.#transcript,
+			{ type: "conversations", list: this.#conversations.map(({ id, title, updatedAt }) => ({ id, title, updatedAt })) },
+			{ type: "model", model: modelKey(this.model) },
+		];
 	}
 
 	async #withAnnotation(text: string, annotation?: Annotation) {
@@ -170,16 +206,40 @@ export class ProjectSession {
 
 	#emit(event: SessionEvent) {
 		if (event.type === "preview") this.#preview = event;
+		if (CHAT_EVENTS.has(event.type)) this.#record(event);
+		this.#broadcast(event);
+	}
+
+	#broadcast(event: SessionEvent) {
 		for (const listener of this.#listeners) listener(event);
+	}
+
+	#record(event: SessionEvent) {
+		const last = this.#transcript.at(-1);
+		if (event.type === "assistant_delta" && last?.type === "assistant_delta") {
+			this.#transcript[this.#transcript.length - 1] = { ...last, text: last.text + event.text };
+		} else {
+			this.#transcript.push(event);
+		}
+	}
+
+	/** 一轮结束：先刷新对话列表（新对话此时才落盘、才有名字），再报告空闲。 */
+	async #onSettled() {
+		try {
+			this.#conversations = await listConversations(this.dir, this.#conversationsDir);
+			this.#broadcast({ type: "conversations", list: this.#conversations.map(({ id, title, updatedAt }) => ({ id, title, updatedAt })) });
+		} catch (error) {
+			this.#emit({ type: "error", message: (error as Error).message });
+		} finally {
+			this.#emit({ type: "busy", busy: false });
+			this.#ensurePreview();
+		}
 	}
 
 	#onAgentEvent(e: AgentSessionEvent) {
 		if (e.type === "agent_start") return this.#emit({ type: "busy", busy: true });
-		if (e.type === "agent_settled") {
-			this.#emit({ type: "busy", busy: false });
-			// 空文件夹里 AI 刚建好项目，或 dev server 之前没起来：现在再试一次。
-			return this.#ensurePreview();
-		}
+		// 空文件夹里 AI 刚建好项目，或 dev server 之前没起来：结束时会再试一次。
+		if (e.type === "agent_settled") return void this.#onSettled();
 		if (e.type === "message_update" && e.assistantMessageEvent.type === "text_delta") {
 			return this.#emit({ type: "assistant_delta", text: e.assistantMessageEvent.delta });
 		}

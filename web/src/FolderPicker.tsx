@@ -1,11 +1,11 @@
-import { ArrowUp, ChevronRight, Folder, FolderCode, House, Monitor, FileText } from "lucide-react";
+import { ArrowUp, ChevronRight, FileText, Folder, FolderCode, HardDrive, House, Monitor } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { FolderEntry, FolderListing, Place } from "../../server/protocol.ts";
 import { errorText, type T } from "./i18n.ts";
 import { Button, IconButton, Modal } from "./ui.tsx";
 import type { RequestError } from "./useWorkspace.ts";
 
-const PLACE_ICONS = { home: House, desktop: Monitor, documents: FileText };
+const PLACE_ICONS = { home: House, desktop: Monitor, documents: FileText, drive: HardDrive };
 
 type ListFolder = (path: string) => Promise<FolderListing>;
 
@@ -163,14 +163,14 @@ export function FolderPicker({ t, title, confirmLabel, initialPath, places, list
 						const Icon = PLACE_ICONS[place.key];
 						return (
 							<button
-								key={place.key}
+								key={place.path}
 								type="button"
 								onClick={() => go(place.path)}
 								aria-current={listing?.path === place.path || undefined}
 								className={`flex h-7 w-full items-center gap-2 rounded-md px-2 text-left ${listing?.path === place.path ? "bg-selected" : "hover:bg-hover"}`}
 							>
 								<Icon size={16} className="text-muted" />
-								{t.places[place.key]}
+								{place.key === "drive" ? place.path : t.places[place.key]}
 							</button>
 						);
 					})}

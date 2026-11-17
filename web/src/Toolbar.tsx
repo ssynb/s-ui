@@ -72,18 +72,17 @@ function ProjectMenu({ t, dir, home, recentProjects, onOpen, onOpenFolder, onNew
 	);
 }
 
-function ModelMenu({ t, models, model, locked, onSelect }: { t: T; models: ModelInfo[]; model?: string; locked: boolean; onSelect: (id: string) => void }) {
+function ModelMenu({ t, models, model, onSelect }: { t: T; models: ModelInfo[]; model?: string; onSelect: (id: string) => void }) {
 	return (
 		<Menu
 			align="right"
-			disabled={locked}
-			title={locked ? t.modelLocked : t.model}
+			title={t.modelHint}
 			buttonLabel={`${t.model}: ${model ?? ""}`}
 			button={
 				<>
 					<Sparkles size={14} className="shrink-0 text-muted" />
 					<span className="truncate">{model}</span>
-					{!locked && <ChevronDown size={14} className="shrink-0 text-muted" />}
+					<ChevronDown size={14} className="shrink-0 text-muted" />
 				</>
 			}
 		>
@@ -130,7 +129,7 @@ export function Toolbar(props: ToolbarProps) {
 					</IconButton>
 				</div>
 			)}
-			<ModelMenu t={t} models={props.models} model={sessionModel ?? props.model} locked={Boolean(sessionModel)} onSelect={props.onSelectModel} />
+			<ModelMenu t={t} models={props.models} model={sessionModel ?? props.model} onSelect={props.onSelectModel} />
 			<IconButton label={t.languageLabel} onClick={props.onToggleLanguage} className="w-auto gap-1 px-2 text-[13px]">
 				<Languages size={16} />
 				{t.language}

@@ -3,7 +3,8 @@
 Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建步骤）+ React 19 / Vite / Tailwind v4 前端。前端只通过一条 WebSocket（`/ws`）与后台交互，协议类型在 `server/protocol.ts`，前后端共用。
 
 - `server/main.ts`：入口。HTTP 服务（Vite 中间件模式托管 `web/`）、WebSocket（只接受工作台自身来源）、按文件夹管理项目会话、自动打开浏览器、退出时清理。
-- `server/project-session.ts`：项目会话深模块。拥有一个 pi 会话（`@earendil-works/pi-coding-agent` SDK）和该项目 dev server 的生命周期；对外只有 `open / prompt / subscribe / abort / dispose`，输出 `SessionEvent` 事件流。不加载用户 `~/.pi/agent` 下的扩展、技能和系统提示，只复用其凭据。
+- `server/project-session.ts`：项目会话深模块。拥有该项目的对话（pi 持久化会话，可新建、切换、换模型）和 dev server 的生命周期；对外只有 `open / prompt / setModel / newConversation / switchConversation / subscribe / abort / dispose`，输出 `SessionEvent` 事件流，订阅时先重放当前对话。
+- `server/conversations.ts`：对话的存储与还原：每个项目一个目录（`~/.s-ui/sessions/<名>-<哈希>/`，pi 的 JSONL 会话），创建 pi 会话（不加载用户 `~/.pi/agent` 下的扩展、技能和系统提示，只复用其凭据）、列出最近对话、从会话记录重建界面对话（用户原话另记为自定义条目）。
 - `server/dev-server.ts`：安装依赖、启动 `dev` 脚本、从输出识别本地地址、按进程组停止。
 - `server/preview-proxy.ts`：每个预览的本地反向代理（含 HMR WebSocket），向 HTML 注入桥接脚本，只应工作台页面的请求在预览里采集圈注现场。
 - `server/page-capture.ts`：在用户的预览页面里执行的采集函数（自包含，会被转成字符串注入）：找圈内元素、拍 DOM 快照。
@@ -18,8 +19,8 @@ Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建
 - `web/src/panels.ts`：工具窗面板契约（冻结）——`PanelDefinition`、`PanelProps`（语言、项目信息、圈选上下文、`submitToAi` 统一交给 AI、`showChat`、`callModule` 调后台模块）。
 - `web/src/ToolWindows.tsx`：JetBrains 式左侧工具窗条与工具窗注册表（对话为内置默认）；`web/src/Workspace.tsx`：打开项目后的工作区，持有圈选与当前工具窗，组装 `PanelProps`。
 - `web/src/library/`、`web/src/references/`：「组件库」「参考页面」工具窗，各含 `index.ts`（PanelDefinition）、面板组件、`strings.ts`。
-- `web/src/App.tsx` 组装：`Toolbar.tsx`（项目切换、模型、语言、运行状态）、`Welcome.tsx`（未打开项目时）、`Workspace.tsx`、`Chat.tsx`（对话工具窗，Markdown、工具调用折叠）、`Preview.tsx`（标签栏、地址条、画圈覆盖层；松手即采集现场成为圈选）、`StatusBar.tsx`、`FolderPicker.tsx`、`NewProjectDialog.tsx`。
+- `web/src/App.tsx` 组装：`Toolbar.tsx`（项目切换、模型、语言、运行状态）、`Welcome.tsx`（未打开项目时）、`Workspace.tsx`、`Chat.tsx`（对话工具窗，Markdown、工具调用折叠）、`ConversationActions.tsx`（新对话、最近对话）、`Preview.tsx`（标签栏、地址条、画圈覆盖层；松手即采集现场成为圈选）、`StatusBar.tsx`、`FolderPicker.tsx`、`NewProjectDialog.tsx`。
 - `examples/hello-page/`：最小示例项目。
-- `test/`：验收测试，`npm test` 运行（需要网络安装示例依赖、已安装 Playwright Chromium）。
+- `test/`：验收测试，`npm test` 运行（需要网络安装示例依赖、已安装 Playwright Chromium）。`test/setup.ts` 把 `S_UI_HOME` 指向临时目录；`test/fake-llm.ts` 是本地假模型（OpenAI 兼容），离线驱动真实 pi 会话。
 
 验证：`npm run typecheck`、`npm test`。

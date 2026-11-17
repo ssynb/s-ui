@@ -1,5 +1,15 @@
 import { useCallback, useEffect, useReducer, useRef } from "react";
-import type { Annotation, ClientMessage, FolderListing, ImageAttachment, ModelInfo, Place, SessionEvent, ServerMessage } from "../../server/protocol.ts";
+import type {
+	Annotation,
+	ClientMessage,
+	ConversationInfo,
+	FolderListing,
+	ImageAttachment,
+	ModelInfo,
+	Place,
+	SessionEvent,
+	ServerMessage,
+} from "../../server/protocol.ts";
 import type { CallModule } from "./panels.ts";
 
 export type ChatItem =
@@ -22,6 +32,8 @@ type State = {
 	sessionId?: string;
 	dir?: string;
 	sessionModel?: string;
+	conversationId?: string;
+	conversations: ConversationInfo[];
 	preview?: Preview;
 	busy: boolean;
 	items: ChatItem[];
@@ -29,7 +41,7 @@ type State = {
 
 type Action = ServerMessage | { type: "connection"; connected: boolean } | { type: "selectModel"; model: string };
 
-const initial: State = { connected: false, models: [], places: [], recentProjects: [], busy: false, items: [] };
+const initial: State = { connected: false, models: [], places: [], recentProjects: [], conversations: [], busy: false, items: [] };
 
 function applyAssistantDelta(items: ChatItem[], text: string): ChatItem[] {
 	const last = items.at(-1);
@@ -45,6 +57,12 @@ function applyTool(items: ChatItem[], e: Extract<SessionEvent, { type: "tool" }>
 
 function applySessionEvent(state: State, e: SessionEvent): State {
 	switch (e.type) {
+		case "conversation":
+			return { ...state, conversationId: e.id, items: [] };
+		case "conversations":
+			return { ...state, conversations: e.list };
+		case "model":
+			return { ...state, sessionModel: e.model };
 		case "preview":
 			return { ...state, preview: e };
 		case "busy":
@@ -81,7 +99,7 @@ function reducer(state: State, action: Action): State {
 		case "recentProjects":
 			return { ...state, recentProjects: action.projects };
 		case "opened":
-			if (action.sessionId === state.sessionId) return state;
+			// 随后的订阅重放会带来当前对话、对话列表、模型和预览状态。
 			return { ...state, sessionId: action.sessionId, dir: action.dir, sessionModel: action.model, preview: undefined, busy: false, items: [] };
 		case "event":
 			return action.sessionId === state.sessionId ? applySessionEvent(state, action.event) : state;
@@ -140,7 +158,6 @@ export function useWorkspace() {
 	const { sessionId, model } = state;
 
 	// 返回稳定的函数引用：依赖它们的组件不会因无关状态更新而重跑副作用。
-	const selectModel = useCallback((m: string) => dispatch({ type: "selectModel", model: m }), []);
 	const open = useCallback(
 		async (dir: string) => {
 			await request({ type: "open", dir, model: model! });
@@ -163,6 +180,16 @@ export function useWorkspace() {
 		[send, sessionId],
 	);
 	const abort = useCallback(() => sessionId && send({ type: "abort", sessionId }), [send, sessionId]);
+	// 打开项目后换模型作用于当前项目的对话；未打开项目时只记下打开时要用的模型。
+	const chooseModel = useCallback(
+		(id: string) => (sessionId ? send({ type: "setModel", sessionId, model: id }) : dispatch({ type: "selectModel", model: id })),
+		[send, sessionId],
+	);
+	const newConversation = useCallback(() => sessionId && send({ type: "newConversation", sessionId }), [send, sessionId]);
+	const switchConversation = useCallback(
+		(conversationId: string) => sessionId && send({ type: "switchConversation", sessionId, conversationId }),
+		[send, sessionId],
+	);
 	const callModule = useCallback<CallModule>(
 		async (module, action, payload, options) => {
 			const msg = await request({ type: "module", sessionId, module, action, payload }, options?.onProgress);
@@ -171,5 +198,5 @@ export function useWorkspace() {
 		[request, sessionId],
 	);
 
-	return { state, selectModel, open, createProject, listFolder, prompt, abort, callModule };
+	return { state, chooseModel, open, createProject, listFolder, prompt, abort, newConversation, switchConversation, callModule };
 }

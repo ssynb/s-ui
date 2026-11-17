@@ -29,14 +29,24 @@ export async function hasDevScript(dir: string) {
 	}
 }
 
+const IS_WINDOWS = process.platform === "win32";
+
 function spawnIn(dir: string, cmd: string, args: string[]) {
-	// detached：独立进程组，stop 时能连同 dev server 的子进程一起结束。
-	return spawn(cmd, args, {
+	// Windows 上包管理器是 .cmd 脚本，只能经 cmd.exe 启动（参数都是本文件里的固定值）。
+	const [file, argv] = IS_WINDOWS ? ["cmd.exe", ["/d", "/s", "/c", [cmd, ...args].join(" ")]] : [cmd, args];
+	return spawn(file, argv, {
 		cwd: dir,
-		detached: true,
+		// POSIX 上独立成进程组，stop 时能连同 dev server 的子进程一起结束；Windows 用 taskkill /T 结束进程树。
+		detached: !IS_WINDOWS,
+		windowsHide: true,
 		stdio: ["ignore", "pipe", "pipe"],
 		env: { ...process.env, BROWSER: "none", NO_COLOR: "1", FORCE_COLOR: "0" },
 	});
+}
+
+function killTree(pid: number) {
+	if (!IS_WINDOWS) return process.kill(-pid, "SIGTERM");
+	spawn("taskkill", ["/pid", String(pid), "/T", "/F"], { stdio: "ignore", windowsHide: true });
 }
 
 function collectLog(child: ChildProcess, onLine: (line: string) => void) {
@@ -113,7 +123,7 @@ export class DevServer {
 		const child = this.#child;
 		if (!child?.pid) return;
 		this.#child = undefined;
-		process.kill(-child.pid, "SIGTERM");
+		killTree(child.pid);
 		await this.#exited;
 	}
 }

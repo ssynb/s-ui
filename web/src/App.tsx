@@ -42,7 +42,7 @@ export function App() {
 				onOpen={openProject}
 				onOpenFolder={openFolder}
 				onNewProject={newProject}
-				onSelectModel={workspace.selectModel}
+				onSelectModel={workspace.chooseModel}
 				onStop={workspace.abort}
 				onToggleLanguage={toggle}
 			/>

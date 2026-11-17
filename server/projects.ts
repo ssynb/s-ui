@@ -1,9 +1,10 @@
 import { existsSync } from "node:fs";
 import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
 import { basename, dirname, join } from "node:path";
-import type { FolderListing } from "./protocol.ts";
+import type { FolderListing, Place } from "./protocol.ts";
 
 const MAX_RECENT = 20;
+const DRIVE_LETTERS = "ABCDEFGHIJKLMNOPQRSTUVWXYZ";
 const HIDDEN_FOLDERS = new Set(["node_modules"]);
 
 /** 最近打开的项目，最新的在前，持久化在 s-ui 的配置文件里。 */
@@ -58,4 +59,15 @@ export async function createProjectFolder(parent: string, name: string) {
 	const path = join(parent, trimmed);
 	await mkdir(path);
 	return path;
+}
+
+/** 文件夹选择框左侧的快捷入口：主目录、桌面、文稿，Windows 上再加存在的盘符。 */
+export function commonPlaces(home: string, platform = process.platform): Place[] {
+	const places: Place[] = [
+		{ key: "home", path: home },
+		{ key: "desktop", path: join(home, "Desktop") },
+		{ key: "documents", path: join(home, "Documents") },
+	];
+	const drives: Place[] = platform === "win32" ? [...DRIVE_LETTERS].map((letter) => ({ key: "drive", path: `${letter}:\\` })) : [];
+	return [...places, ...drives].filter((p) => existsSync(p.path));
 }

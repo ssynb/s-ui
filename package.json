@@ -10,7 +10,7 @@
   },
   "scripts": {
     "dev": "node server/main.ts",
-    "test": "node --test test/*.test.ts",
+    "test": "node --import ./test/setup.ts --test test/*.test.ts",
     "typecheck": "tsc --noEmit -p ."
   },
   "dependencies": {

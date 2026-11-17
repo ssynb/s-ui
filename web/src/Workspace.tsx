@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { Annotation } from "../../server/protocol.ts";
 import { Chat } from "./Chat.tsx";
+import { ConversationActions } from "./ConversationActions.tsx";
 import type { Locale, T } from "./i18n.ts";
 import type { AiSubmission, PanelProps } from "./panels.ts";
 import { projectName } from "./paths.ts";
@@ -42,6 +43,16 @@ export function Workspace({ t, locale, workspace }: Props) {
 				active={activeWindow}
 				onActivate={setActiveWindow}
 				panelProps={panelProps}
+				chatActions={
+					<ConversationActions
+						t={t}
+						locale={locale}
+						current={state.conversationId}
+						conversations={state.conversations}
+						onNew={workspace.newConversation}
+						onSwitch={workspace.switchConversation}
+					/>
+				}
 				chat={<Chat t={t} items={state.items} busy={state.busy} onSend={(text) => submitToAi({ text })} onStop={workspace.abort} />}
 			/>
 			<Preview

@@ -16,11 +16,13 @@ type Props = {
 	active: string;
 	onActivate: (id: string) => void;
 	chat: ReactNode;
+	/** 对话工具窗标题栏右侧的操作（新对话、对话记录）。 */
+	chatActions: ReactNode;
 	panelProps: PanelProps;
 };
 
 /** JetBrains 式左侧工具窗：最左一列图标条切换，右侧显示当前工具窗。看过的工具窗保持挂载，切回来状态还在。 */
-export function ToolWindows({ t, locale, active, onActivate, chat, panelProps }: Props) {
+export function ToolWindows({ t, locale, active, onActivate, chat, chatActions, panelProps }: Props) {
 	const [visited, setVisited] = useState(() => new Set([active]));
 	if (!visited.has(active)) setVisited(new Set(visited).add(active));
 
@@ -51,7 +53,10 @@ export function ToolWindows({ t, locale, active, onActivate, chat, panelProps }:
 				))}
 			</div>
 			<div className="flex min-w-0 flex-1 flex-col">
-				<h2 className="flex h-9 shrink-0 items-center px-3 font-semibold">{current.title}</h2>
+				<div className="flex h-9 shrink-0 items-center gap-1 pr-1.5 pl-3">
+					<h2 className="flex-1 truncate font-semibold">{current.title}</h2>
+					{active === CHAT_WINDOW && chatActions}
+				</div>
 				{windows
 					.filter((w) => visited.has(w.id))
 					.map((w) => (

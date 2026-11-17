@@ -11,12 +11,16 @@ function isClaudeSubscription(runtime: ModelRuntime, m: Model) {
 	return m.provider === "anthropic" && runtime.isUsingOAuth("anthropic");
 }
 
+export function isUsable(runtime: ModelRuntime, m: Model) {
+	return !isClaudeSubscription(runtime, m);
+}
+
 export function assertUsable(runtime: ModelRuntime, m: Model) {
-	if (isClaudeSubscription(runtime, m)) {
+	if (!isUsable(runtime, m)) {
 		throw new Error("Claude subscription OAuth is not supported; configure an Anthropic API key instead");
 	}
 }
 
 export async function listUsableModels(runtime: ModelRuntime) {
-	return (await runtime.getAvailable()).filter((m) => !isClaudeSubscription(runtime, m));
+	return (await runtime.getAvailable()).filter((m) => isUsable(runtime, m));
 }
