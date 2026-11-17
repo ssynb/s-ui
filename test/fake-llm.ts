@@ -31,14 +31,14 @@ function reply(body: ChatRequest) {
 }
 
 /** 启动假模型，返回指向它的 ModelRuntime（模型 fake/fake-1、fake/fake-2）和收到的请求。respond 可替换默认回复规则。 */
-export async function startFakeLlm(dir: string, extraAuth: object = {}, respond?: (body: ChatRequest) => FakeReply) {
+export async function startFakeLlm(dir: string, extraAuth: object = {}, respond?: (body: ChatRequest) => FakeReply | Promise<FakeReply>) {
 	const requests: ChatRequest[] = [];
 	const server = createServer(async (req, res) => {
 		let raw = "";
 		for await (const part of req) raw += part;
 		const body = JSON.parse(raw) as ChatRequest;
 		requests.push(body);
-		const custom = respond?.(body);
+		const custom = await respond?.(body);
 		if (custom && "httpError" in custom) return res.writeHead(custom.httpError, { "content-type": "application/json" }).end(JSON.stringify({ error: { message: "fake failure" } }));
 		res.writeHead(200, { "content-type": "text/event-stream" });
 		for (const line of custom ? stream(body.model, custom) : reply(body)) res.write(line);

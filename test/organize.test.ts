@@ -35,10 +35,12 @@ test("if organizing changes how the page looks and the AI cannot fix it, every c
 	await writeFile(join(dir, "src/style.css"), STYLE);
 	const previewUrl = await serveProject(t, dir);
 
-	// 假模型：第一轮写出设计变量文件、同时把页面背景改坏；之后（包括被要求修复时）只回一句话。
-	const breakPage = `printf '%s' '${TOKENS}' > ${TOKENS_FILE} && printf '%s' 'body { margin: 0; background: #ff0000; }' > src/style.css`;
-	let turns = 0;
-	const respond = (body: ChatRequest) => (turns++ === 0 && body.messages.at(-1)!.role !== "tool" ? { tool: "bash", args: { command: breakPage } } : { text: "done" });
+	// 假模型：先写出设计变量文件、再把页面背景改坏（整理用的 AI 只有读写工具）；之后（包括被要求修复时）只回一句话。
+	const script = [
+		{ tool: "write", args: { path: TOKENS_FILE, content: TOKENS } },
+		{ tool: "write", args: { path: "src/style.css", content: "body { margin: 0; background: #ff0000; }" } },
+	];
+	const respond = (body: ChatRequest) => script[body.messages.filter((m) => m.role === "tool").length] ?? { text: "done" };
 	const llm = await startFakeLlm(await mkdtemp(join(tmpdir(), "s-ui-pi-")), {}, respond);
 	t.after(llm.close);
 

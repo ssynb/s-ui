@@ -29,8 +29,11 @@ const exclusive = <T>(_task: string, fn: () => Promise<T>) => fn();
 
 test("if the AI fails after it has already edited files, organizing undoes those edits", async (t) => {
 	const dir = await project();
-	const writeThenFail = (body: ChatRequest): FakeReply =>
-		body.messages.at(-1)!.role === "tool" ? { httpError: 400 } : { tool: "bash", args: { command: `printf 'broken' > src/style.css && printf ':root{}' > ${TOKENS_FILE}` } };
+	const script: FakeReply[] = [
+		{ tool: "write", args: { path: "src/style.css", content: "broken" } },
+		{ tool: "write", args: { path: TOKENS_FILE, content: ":root{}" } },
+	];
+	const writeThenFail = (body: ChatRequest): FakeReply => script[body.messages.filter((m) => m.role === "tool").length] ?? { httpError: 400 };
 	const { llm, model } = await fakeModel(t, writeThenFail);
 
 	await assert.rejects(organizeTokens({ dir, model, exclusive }, llm.modelRuntime, () => {}));
