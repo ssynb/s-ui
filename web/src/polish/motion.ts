@@ -14,8 +14,8 @@ export type MotionEffect = {
 	params: ParamSpec[];
 	/** 一次性播放的效果（进场、抖动）：试用时可以重播。 */
 	replayable?: boolean;
-	/** run 用来重播：换一个关键帧名字，浏览器就会重新播放。 */
-	css: (sel: string, p: ParamValues, ctx: { primary: string; run: number; kind: ComponentKind }) => string[];
+	/** 关键帧一律用 ctx.frames(名) 命名：名字按组件类别和重播次数区分，同一效果用在几类组件上各自的参数互不覆盖，换名字也让浏览器重新播放。 */
+	css: (sel: string, p: ParamValues, ctx: { primary: string; kind: ComponentKind; frames: (name: string) => string }) => string[];
 	describe: (p: ParamValues) => Text;
 	states: Text;
 };
@@ -103,9 +103,9 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 				border: "2px solid currentColor",
 				"border-color": `color-mix(in oklab, var(--sui-color-primary-contrast, ${c.primary}) 35%, transparent)`,
 				"border-top-color": `var(--sui-color-primary-contrast, ${c.primary})`,
-				animation: `sui-polish-spin ${ms(p, "period")} linear infinite`,
+				animation: `${c.frames("spin")} ${ms(p, "period")} linear infinite`,
 			}),
-			"@keyframes sui-polish-spin { to { rotate: 360deg; } }",
+			`@keyframes ${c.frames("spin")} { to { rotate: 360deg; } }`,
 		],
 		describe: (p) => ({
 			zh: `提交中按钮文字淡出、换成转圈（一圈 ${n(p, "period")}ms），按钮宽度保持不变，期间不能重复点击；完成后换回文字`,
@@ -123,8 +123,8 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 		css: (sel, p, c) => {
 			const x = n(p, "distance");
 			return [
-				rule(sel, { "border-color": "#db3b4b", animation: `sui-polish-shake-${c.run} ${ms(p)} both` }),
-				`@keyframes sui-polish-shake-${c.run} { 20% { translate: ${-x}px 0; } 40% { translate: ${x * 0.8}px 0; } 60% { translate: ${-x * 0.5}px 0; } 80% { translate: ${x * 0.3}px 0; } }`,
+				rule(sel, { "border-color": "#db3b4b", animation: `${c.frames("shake")} ${ms(p)} both` }),
+				`@keyframes ${c.frames("shake")} { 20% { translate: ${-x}px 0; } 40% { translate: ${x * 0.8}px 0; } 60% { translate: ${-x * 0.5}px 0; } 80% { translate: ${x * 0.3}px 0; } }`,
 			];
 		},
 		describe: (p) => ({
@@ -141,8 +141,8 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 		replayable: true,
 		params: [px("distance", "上移距离", "Rise distance", 0, 40, 12), duration(400), easing()],
 		css: (sel, p, c) => [
-			rule(sel, { animation: `sui-polish-fade-up-${c.run} ${ms(p)} ${s(p, "easing")} both` }),
-			`@keyframes sui-polish-fade-up-${c.run} { from { opacity: 0; translate: 0 ${n(p, "distance")}px; } }`,
+			rule(sel, { animation: `${c.frames("fade-up")} ${ms(p)} ${s(p, "easing")} both` }),
+			`@keyframes ${c.frames("fade-up")} { from { opacity: 0; translate: 0 ${n(p, "distance")}px; } }`,
 		],
 		describe: (p) => ({
 			zh: `进入页面时从下方 ${n(p, "distance")}px 处淡入上移到位（${timing(p).zh}），首屏已显示过的内容不要重播`,
@@ -158,9 +158,9 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 		replayable: true,
 		params: [px("distance", "上移距离", "Rise distance", 0, 24, 8), duration(300), range("gap", { zh: "间隔", en: "Delay between items" }, 20, 200, 10, "ms", 60)],
 		css: (sel, p, c) => [
-			rule(`${sel} > *`, { animation: `sui-polish-rise-${c.run} ${ms(p)} ${EASE_OUT} both` }),
+			rule(`${sel} > *`, { animation: `${c.frames("rise")} ${ms(p)} ${EASE_OUT} both` }),
 			...Array.from({ length: 8 }, (_, i) => rule(`${sel} > *:nth-child(${i + 2})`, { "animation-delay": `${(i + 1) * n(p, "gap")}ms` })),
-			`@keyframes sui-polish-rise-${c.run} { from { opacity: 0; translate: 0 ${n(p, "distance")}px; } }`,
+			`@keyframes ${c.frames("rise")} { from { opacity: 0; translate: 0 ${n(p, "distance")}px; } }`,
 		],
 		describe: (p) => ({
 			zh: `列表各项依次从下方 ${n(p, "distance")}px 淡入（每项 ${n(p, "duration")}ms，间隔 ${n(p, "gap")}ms）；新增一项时只播放它自己`,
@@ -191,7 +191,7 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 		summary: { zh: "预览加载中的样子：灰色占位上一道微光扫过", en: "Shows the loading look: gray placeholders with a sweeping light" },
 		kinds: ["card", "list"],
 		params: [range("period", { zh: "扫一次用时", en: "Sweep period" }, 600, 3000, 100, "ms", 1400)],
-		css: (sel, p) => [
+		css: (sel, p, c) => [
 			rule(sel, { position: "relative", overflow: "hidden" }),
 			rule(`${sel}::after`, {
 				content: '""',
@@ -200,9 +200,9 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 				"border-radius": "inherit",
 				background: "linear-gradient(90deg, rgb(127 127 127 / .14) 30%, rgb(127 127 127 / .26) 50%, rgb(127 127 127 / .14) 70%) var(--sui-color-surface, #fff)",
 				"background-size": "300% 100%",
-				animation: `sui-polish-sheen ${ms(p, "period")} linear infinite`,
+				animation: `${c.frames("sheen")} ${ms(p, "period")} linear infinite`,
 			}),
-			"@keyframes sui-polish-sheen { from { background-position: 100% 0; } to { background-position: -100% 0; } }",
+			`@keyframes ${c.frames("sheen")} { from { background-position: 100% 0; } to { background-position: -100% 0; } }`,
 		],
 		describe: (p) => ({
 			zh: `内容没到时用和最终内容同样形状的灰色占位，一道微光每 ${n(p, "period") / 1000} 秒扫过；不要显示“暂无内容”`,
@@ -214,5 +214,5 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 
 export function motionLayer(effect: MotionEffect, found: FoundComponent, params: ParamValues, run = 0) {
 	const ctx = styleContext(found);
-	return effect.css(ctx.s, { ...defaults(effect.params), ...params }, { primary: ctx.primary, run, kind: found.kind }).join("\n");
+	return effect.css(ctx.s, { ...defaults(effect.params), ...params }, { primary: ctx.primary, kind: found.kind, frames: (name) => `sui-polish-${name}-${found.kind}-${run}` }).join("\n");
 }

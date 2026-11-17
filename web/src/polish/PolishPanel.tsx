@@ -7,7 +7,7 @@ import { savePayload } from "./draft.ts";
 import { useInspection, usePolishStatus, usePreviewSync } from "./hooks.ts";
 import { ComponentsSection, MotionSection } from "./PageSections.tsx";
 import { Notice, TextButton } from "./parts.tsx";
-import { changeCount, desiredLayers, EMPTY_DRAFT, type PolishDraft, tokenChangeCount, tokenDraft, usePolishDraft } from "./state.ts";
+import { afterSave, changeCount, desiredLayers, EMPTY_DRAFT, type PolishDraft, tokenChangeCount, tokenDraft, usePolishDraft } from "./state.ts";
 import { STRINGS } from "./strings.ts";
 import { ColorSection, FontSection, ShapeSection } from "./TokenSections.tsx";
 
@@ -62,7 +62,7 @@ export function PolishPanel(panel: PanelProps) {
 				</section>
 			</div>
 
-			<SaveBar panel={panel} draft={draft} setDraft={setDraft} polish={polish} tokens={tokens} clearPreview={sync.clearAll} />
+			<SaveBar panel={panel} draft={draft} setDraft={setDraft} polish={polish} clearPreview={sync.clearAll} />
 		</div>
 	);
 }
@@ -148,11 +148,10 @@ type SaveBarProps = {
 	draft: PolishDraft;
 	setDraft: (update: (d: PolishDraft) => PolishDraft) => void;
 	polish: Polish;
-	tokens: ReturnType<typeof tokenDraft>;
 	clearPreview: () => Promise<void>;
 };
 
-function SaveBar({ panel, draft, setDraft, polish, tokens, clearPreview }: SaveBarProps) {
+function SaveBar({ panel, draft, setDraft, polish, clearPreview }: SaveBarProps) {
 	const { locale, callModule, preview } = panel;
 	const s = STRINGS[locale];
 	const [state, setState] = useState<{ state: "idle" | "saving" | "saved" } | { state: "error"; message: string }>({ state: "idle" });
@@ -169,9 +168,10 @@ function SaveBar({ panel, draft, setDraft, polish, tokens, clearPreview }: SaveB
 		if (!status) return;
 		setState({ state: "saving" });
 		try {
-			const payload = savePayload(tokens, status);
+			const sent = draft;
+			const payload = savePayload(tokenDraft(sent), status);
 			if (Object.keys(payload.values).length || payload.fontImports) polish.setStatus({ state: "ready", status: await callModule<PolishApi, "saveTokens">("polish", "saveTokens", payload) });
-			setDraft((d) => ({ ...d, font: undefined, palette: undefined, primary: undefined, shape: {} }));
+			setDraft((d) => afterSave(d, sent));
 			setState({ state: "saved" });
 		} catch (e) {
 			setState({ state: "error", message: e instanceof Error ? e.message : String(e) });

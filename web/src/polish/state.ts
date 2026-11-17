@@ -49,6 +49,21 @@ export function tokenChangeCount(d: PolishDraft) {
 	return (d.font ? 1 : 0) + (d.palette || d.primary ? 1 : 0) + Object.keys(d.shape).length;
 }
 
+/**
+ * 保存成功后剩下的改动：只清掉保存时发出去、且之后没再动过的字体、配色、形状项；
+ * 保存请求进行中又做的修改仍是未保存改动。
+ */
+export function afterSave(current: PolishDraft, sent: PolishDraft): PolishDraft {
+	const next = { ...current, shape: { ...current.shape } };
+	if (next.font === sent.font) next.font = undefined;
+	if (next.palette === sent.palette && next.primary === sent.primary) {
+		next.palette = undefined;
+		next.primary = undefined;
+	}
+	for (const knob of Object.keys(sent.shape) as ShapeKnob[]) if (next.shape[knob] === sent.shape[knob]) delete next.shape[knob];
+	return next;
+}
+
 /** 页面上应有的临时样式层（id → CSS）。组件与动效需要识别结果才知道选择器。 */
 export function desiredLayers(d: PolishDraft, inspection?: PageInspection) {
 	const layers = new Map<string, string>();
