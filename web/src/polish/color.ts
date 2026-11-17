@@ -1,3 +1,5 @@
+import type { FoundComponent, PageInspection } from "../panels.ts";
+
 // 颜色计算：WCAG 相对亮度与对比度，给主色挑一个可读的文字色。
 
 const AA_TEXT = 4.5;
@@ -37,4 +39,20 @@ export function readableOn(background: string) {
 export function toHex(value: string) {
 	const rgb = parseColor(value);
 	return rgb && `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
+}
+
+const sameColor = (a: [number, number, number], b: [number, number, number]) => a.every((x, i) => Math.abs(x - b[i]!) <= 1);
+
+/**
+ * 换了主色之后仍在用原主色的组件（文字、背景或边框里出现原主色）：多半是代码里写死的颜色，没有用设计变量。
+ * 页面上已经找不到原主色时为空。
+ */
+export function leftoverPrimary(inspection: PageInspection, originalPrimary: string): FoundComponent[] {
+	const original = parseColor(originalPrimary);
+	if (!original) return [];
+	const uses = (value: string) => [...value.matchAll(/rgba?\([^)]*\)/g)].some((m) => {
+		const rgb = parseColor(m[0]);
+		return rgb !== undefined && !/,\s*0\)$/.test(m[0]) && sameColor(rgb, original);
+	});
+	return inspection.components.filter((c) => Object.values(c.styles).some((v) => v && uses(v)));
 }

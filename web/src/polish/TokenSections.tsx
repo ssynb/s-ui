@@ -1,9 +1,10 @@
 import { useEffect } from "react";
-import type { Locale, TokenValues } from "../panels.ts";
+import type { FoundComponent, Locale, TokenValues } from "../panels.ts";
+import { KIND_NAMES } from "./components.ts";
 import { contrastRatio, readableOn, toHex } from "./color.ts";
 import { FONT_PAIRS } from "./fonts.ts";
 import { PALETTES } from "./palettes.ts";
-import { Section, TextButton, Tile } from "./parts.tsx";
+import { Notice, Section, TextButton, Tile } from "./parts.tsx";
 import { SHAPE_RANGES, type ShapeKnob, shapeValue } from "./shape.ts";
 import type { PolishDraft } from "./state.ts";
 import { STRINGS } from "./strings.ts";
@@ -70,7 +71,13 @@ export function FontSection({ locale, draft, setDraft, saved, disabled, note }: 
 	);
 }
 
-export function ColorSection({ locale, draft, setDraft, saved, disabled, note }: Props) {
+type ColorProps = Props & {
+	/** 换色后仍是原主色的组件（检测到才有）。 */
+	leftovers: FoundComponent[];
+	onFixLeftovers: () => void;
+};
+
+export function ColorSection({ locale, draft, setDraft, saved, disabled, note, leftovers, onFixLeftovers }: ColorProps) {
 	const s = STRINGS[locale];
 	const savedPalette = PALETTES.find((p) => p.primary === saved["--sui-color-primary"] && p.bg === saved["--sui-color-bg"] && p.text === saved["--sui-color-text"]);
 	const chosen = PALETTES.find((p) => p.id === draft.palette);
@@ -112,6 +119,12 @@ export function ColorSection({ locale, draft, setDraft, saved, disabled, note }:
 					{s.textOnPrimary(onPrimary, contrastRatio(primary, onPrimary).toFixed(1))}
 				</span>
 			</label>
+			{leftovers.length > 0 && (
+				<div className="mt-2 space-y-1.5">
+					<Notice>{s.leftovers(leftovers.map((c) => `${KIND_NAMES[c.kind][locale]}（${c.groupSelector}）`).join(locale === "zh" ? "、" : ", "))}</Notice>
+					<TextButton onClick={onFixLeftovers}>{s.fixLeftovers}</TextButton>
+				</div>
+			)}
 		</Section>
 	);
 }

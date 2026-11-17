@@ -9,6 +9,8 @@ const errorText = (e: unknown) => (e instanceof Error ? e.message : String(e));
  */
 export function usePreviewSync(preview: PreviewControl, layers: Map<string, string>, fonts: string[]) {
 	const [error, setError] = useState<string>();
+	/** 每完成一次同步加一：之后读到的页面已带上当前的临时样式。 */
+	const [synced, setSynced] = useState(0);
 	const applied = useRef(new Map<string, string>());
 	const loadedFonts = useRef(new Set<string>());
 	const queue = useRef(Promise.resolve());
@@ -41,6 +43,7 @@ export function usePreviewSync(preview: PreviewControl, layers: Map<string, stri
 					applied.current.delete(id);
 				}
 				setError(undefined);
+				setSynced((n) => n + 1);
 			} catch (e) {
 				setError(errorText(e));
 			}
@@ -54,7 +57,7 @@ export function usePreviewSync(preview: PreviewControl, layers: Map<string, stri
 		loadedFonts.current = new Set();
 	}, []);
 
-	return { error, clearAll };
+	return { error, clearAll, synced };
 }
 
 type StatusState = { state: "loading" } | { state: "error"; message: string } | { state: "ready"; status: PolishStatus };
@@ -91,7 +94,7 @@ export function usePolishStatus(callModule: PanelProps["callModule"]) {
 	return { status, setStatus, load, organize, runOrganize };
 }
 
-/** 识别预览页面里的组件；预览就绪时自动识别一次，可手动重新识别（识别中保留上一次结果，试用样式不闪）。 */
+/** 识别预览页面里的组件；预览就绪时自动识别一次，可手动重新识别（识别中保留上一次结果，试用样式不闪）。run 返回这次的结果，失败时为空（错误在 error 里）。 */
 export function useInspection(preview: PreviewControl) {
 	const [inspection, setInspection] = useState<PageInspection>();
 	const [loading, setLoading] = useState(false);
@@ -101,17 +104,21 @@ export function useInspection(preview: PreviewControl) {
 
 	const run = useCallback(() => {
 		setLoading(true);
-		control.current.inspect().then(
+		return control.current.inspect().then(
 			(result) => {
 				setInspection(result);
 				setError(undefined);
+				return result;
 			},
-			(e) => setError(errorText(e)),
+			(e) => {
+				setError(errorText(e));
+				return undefined;
+			},
 		).finally(() => setLoading(false));
 	}, []);
 
 	useEffect(() => {
-		if (preview.ready) run();
+		if (preview.ready) void run();
 	}, [preview.ready, run]);
 
 	return { inspection, loading, error, run };

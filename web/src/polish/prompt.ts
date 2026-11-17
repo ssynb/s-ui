@@ -57,6 +57,16 @@ export function componentRequest({ found, variant, reasons, locale }: { found: F
 	return lines.join("\n");
 }
 
+/** 换配色后仍是原主色的组件：请 AI 把写死的颜色改用设计变量（外观按已保存的设置不变）。 */
+export function leftoverColorsRequest({ components, original, locale }: { components: FoundComponent[]; original: string; locale: Locale }) {
+	const zh = locale === "zh";
+	const head = zh
+		? `页面里还有写死的颜色没用设计设置：下面这些元素仍是原来的主色 ${original}，换配色时不会跟着变。请把它们的颜色改用 ${TOKENS_FILE} 里的设计变量（主色用 --sui-color-primary，主色上的文字用 --sui-color-primary-contrast，边框用 --sui-color-border，其余按含义选），只改颜色的写法，不改布局和其他样式；按现在保存的设置，页面外观应保持不变。`
+		: `Some colors on the page are hard-coded instead of using the design settings: the elements below still use the old primary ${original} and don't follow palette changes. Switch their colors to the design variables in ${TOKENS_FILE} (--sui-color-primary for the primary, --sui-color-primary-contrast for text on it, --sui-color-border for borders, others by meaning). Change only how colors are written, not layout or other styles; with the currently saved settings the page should look the same.`;
+	const lines = components.map((c) => `- ${KIND_NAMES[c.kind][locale]}${zh ? `（共 ${c.count} 个）：` : ` (${c.count}): `}\`${c.groupSelector}\`${zh ? "，代表元素" : ", e.g."} \`${c.selector}\``);
+	return [head, "", ...lines].join("\n");
+}
+
 export function motionRequest({ found, effect, params, locale }: { found: FoundComponent; effect: MotionEffect; params: ParamValues; locale: Locale }) {
 	const w = WORDS[locale];
 	const p = { ...defaults(effect.params), ...params };

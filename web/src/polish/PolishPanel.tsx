@@ -1,6 +1,9 @@
 import { Check, CircleAlert, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { PanelProps, PolishApi } from "../panels.ts";
+import type { FoundComponent } from "../panels.ts";
+import { leftoverPrimary } from "./color.ts";
+import { leftoverColorsRequest } from "./prompt.ts";
+import type { OrganizeProgress, PanelProps, PolishApi } from "../panels.ts";
 import { SimilarProducts } from "../references/SimilarProducts.tsx";
 import { Button, Spinner } from "../ui.tsx";
 import { savePayload } from "./draft.ts";
@@ -10,6 +13,9 @@ import { Notice, TextButton } from "./parts.tsx";
 import { afterSave, changeCount, desiredLayers, EMPTY_DRAFT, type PolishDraft, tokenChangeCount, tokenDraft, usePolishDraft } from "./state.ts";
 import { STRINGS } from "./strings.ts";
 import { ColorSection, FontSection, ShapeSection } from "./TokenSections.tsx";
+
+/** 样式层生效后稍等再识别，避免读到换色前的页面。 */
+const SETTLE_MS = 400;
 
 const NAV = [
 	["polish-fonts", "fonts"],
@@ -32,6 +38,7 @@ export function PolishPanel(panel: PanelProps) {
 	const sync = usePreviewSync(preview, layers, tokens.fontImports ?? []);
 
 	const status = polish.status.state === "ready" ? polish.status.status : undefined;
+	const leftovers = useLeftoverColors(panel, draft, status?.values["--sui-color-primary"], page.run, sync.synced);
 	const tokenNote = !preview.ready ? s.needsPreview : !status?.organized ? s.needsOrganize : undefined;
 	const pageNote = preview.ready ? undefined : s.needsPreview;
 	const tokenProps = { locale, draft, setDraft, saved: status?.values ?? {}, disabled: Boolean(tokenNote), note: tokenNote };
@@ -39,20 +46,30 @@ export function PolishPanel(panel: PanelProps) {
 
 	return (
 		<div className="flex flex-1 flex-col">
-			<nav aria-label={s.sections} className="sticky top-0 z-10 flex gap-0.5 overflow-x-auto border-b border-line bg-app px-2 py-1">
-				{NAV.map(([id, key]) => (
-					<button key={id} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })} className="h-6 shrink-0 rounded-md px-2 text-xs text-muted hover:bg-hover hover:text-fg">
-						{s[key]}
-					</button>
-				))}
-			</nav>
+			<div className="sticky top-0 z-10 border-b border-line bg-app">
+				<nav aria-label={s.sections} className="flex gap-0.5 overflow-x-auto px-2 py-1">
+					{NAV.map(([id, key]) => (
+						<button key={id} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })} className="h-6 shrink-0 rounded-md px-2 text-xs text-muted hover:bg-hover hover:text-fg">
+							{s[key]}
+						</button>
+					))}
+				</nav>
+				{polish.organize.state === "running" && <OrganizeProgressLine locale={locale} progress={polish.organize.progress} />}
+			</div>
 
 			<div className="flex-1 space-y-6 p-3">
 				{!preview.ready && <Notice>{project.previewUrl ? s.previewConnecting : s.previewNotRunning}</Notice>}
 				{sync.error && <Notice tone="danger">{s.previewFailed(sync.error)}</Notice>}
 				<StatusCard panel={panel} polish={polish} />
 				<FontSection {...tokenProps} />
-				<ColorSection {...tokenProps} />
+				<ColorSection
+					{...tokenProps}
+					leftovers={leftovers}
+					onFixLeftovers={() => {
+						panel.submitToAi({ text: leftoverColorsRequest({ components: leftovers, original: status!.values["--sui-color-primary"]!, locale }) });
+						panel.showChat();
+					}}
+				/>
 				<ShapeSection {...tokenProps} />
 				<ComponentsSection {...pageProps} />
 				<MotionSection {...pageProps} />
@@ -68,6 +85,41 @@ export function PolishPanel(panel: PanelProps) {
 }
 
 type Polish = ReturnType<typeof usePolishStatus>;
+
+/**
+ * 改了配色时，等样式层生效后重新识别页面，找出仍是原主色的组件（写死的颜色）。
+ * 只认这次配色下识别出的结果，换色前的识别结果不算。
+ */
+function useLeftoverColors(panel: PanelProps, draft: PolishDraft, original: string | undefined, inspect: ReturnType<typeof useInspection>["run"], synced: number) {
+	const tokens = tokenDraft(draft).tokens;
+	const primary = tokens["--sui-color-primary"];
+	const key = primary && original && primary !== original ? `${draft.palette}|${primary}` : undefined;
+	const [found, setFound] = useState<{ key: string; components: FoundComponent[] }>();
+	useEffect(() => {
+		if (!key || !original || !panel.preview.ready) return;
+		const timer = setTimeout(() => {
+			void inspect().then((result) => result && setFound({ key, components: leftoverPrimary(result, original) }));
+		}, SETTLE_MS);
+		return () => clearTimeout(timer);
+	}, [key, original, synced, panel.preview.ready, inspect]);
+	return found && found.key === key ? found.components : [];
+}
+
+function organizeStep(locale: PanelProps["locale"], progress: OrganizeProgress[]) {
+	const s = STRINGS[locale];
+	const last = progress.at(-1);
+	if (!last) return s.organizeProgress;
+	return last.phase === "tool" ? last.summary : last.phase === "text" ? last.text : s.organizePhase[last.phase];
+}
+
+function OrganizeProgressLine({ locale, progress }: { locale: PanelProps["locale"]; progress: OrganizeProgress[] }) {
+	return (
+		<p role="status" className="flex items-center gap-2 border-t border-line px-3 py-1.5 text-xs text-muted">
+			<Spinner />
+			<span className="min-w-0 flex-1 truncate">{organizeStep(locale, progress)}</span>
+		</p>
+	);
+}
 
 function StatusCard({ panel, polish }: { panel: PanelProps; polish: Polish }) {
 	const s = STRINGS[panel.locale];
@@ -88,8 +140,7 @@ function StatusCard({ panel, polish }: { panel: PanelProps; polish: Polish }) {
 	if (status.status.organized) return null;
 
 	const running = organize.state === "running";
-	const last = running ? organize.progress.at(-1) : undefined;
-	const step = last && (last.phase === "tool" ? last.summary : last.phase === "text" ? last.text : s.organizePhase[last.phase]);
+	const blocked = running ? undefined : !panel.preview.ready ? s.organizeNeedsPreview : panel.busy ? s.organizeBusy : undefined;
 	return (
 		<div className="space-y-2 rounded-lg bg-panel p-3 ring-1 ring-line">
 			<h3 className="flex items-center gap-1.5 font-semibold">
@@ -99,15 +150,11 @@ function StatusCard({ panel, polish }: { panel: PanelProps; polish: Polish }) {
 			<p className="text-xs text-pretty text-muted">{s.organizeBody}</p>
 			{organize.state === "error" && <Notice tone="danger">{s.organizeFailed(organize.message)}</Notice>}
 			<div className="flex items-center gap-2">
-				<Button variant="primary" disabled={running} onClick={polish.runOrganize}>
+				<Button variant="primary" disabled={running || Boolean(blocked)} onClick={polish.runOrganize}>
 					{running && <Spinner />}
 					{running ? s.organizing : s.organize}
 				</Button>
-				{step && (
-					<span role="status" className="min-w-0 flex-1 truncate text-xs text-muted">
-						{step}
-					</span>
-				)}
+				{blocked && <span className="min-w-0 flex-1 text-xs text-pretty text-muted">{blocked}</span>}
 			</div>
 		</div>
 	);
