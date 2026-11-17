@@ -1,0 +1,83 @@
+import { ExternalLink, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import type { ReferencesApi } from "../../../server/modules/references.ts";
+import type { PanelProps } from "../panels.ts";
+import { Button, IconButton, Modal, Spinner } from "../ui.tsx";
+import { hostOf, jpegSrc, type RefCard } from "./ReferenceCard.tsx";
+import { ASPECTS, type Aspect, STRINGS } from "./strings.ts";
+
+type Props = PanelProps & { card: RefCard & { image: string }; onClose: () => void };
+
+/** 大图：先显示首屏，整页长截图拍好后换上，可滚动查看；右侧选参考哪些方面，交给 AI。 */
+export function ReferenceViewer({ card, onClose, locale, selection, callModule, submitToAi, showChat }: Props) {
+	const s = STRINGS[locale];
+	const [fullPage, setFullPage] = useState<string | "loading" | "failed">("loading");
+	const [aspects, setAspects] = useState<Set<Aspect>>(() => new Set(ASPECTS));
+
+	useEffect(() => {
+		callModule<ReferencesApi, "capture">("references", "capture", { url: card.url, fullPage: true })
+			.then((shot) => setFullPage(shot.ok ? shot.image : "failed"))
+			.catch(() => setFullPage("failed"));
+	}, [callModule, card.url]);
+
+	const toggle = (aspect: Aspect) => {
+		const next = new Set(aspects);
+		if (!next.delete(aspect)) next.add(aspect);
+		setAspects(next);
+	};
+
+	const useAsReference = () => {
+		const withSelection = Boolean(selection);
+		const chosen = ASPECTS.filter((a) => aspects.has(a));
+		submitToAi({
+			text: s.instruction({ name: card.name, url: card.url, aspects: chosen, withSelection }),
+			images: [{ data: card.image, mimeType: "image/jpeg" }],
+			withSelection,
+		});
+		showChat();
+		onClose();
+	};
+
+	const image = fullPage === "loading" || fullPage === "failed" ? card.image : fullPage;
+	return (
+		<Modal title={card.name} onClose={onClose} className="h-[88vh] w-[min(1240px,94vw)]">
+			<div className="flex min-h-0 flex-1 border-t border-line">
+				<div className="min-w-0 flex-1 overflow-y-auto bg-app">
+					<img src={jpegSrc(image)} alt={card.name} className="block w-full" />
+				</div>
+				<aside className="flex w-64 shrink-0 flex-col gap-4 border-l border-line p-4">
+					<div className="space-y-1">
+						<a href={card.url} target="_blank" rel="noreferrer" className="inline-flex max-w-full items-center gap-1 text-muted hover:text-accent">
+							<span className="truncate">{hostOf(card.url)}</span>
+							<ExternalLink size={12} className="shrink-0" aria-label={s.openInBrowser} />
+						</a>
+						{card.why && <p className="text-pretty">{card.why}</p>}
+					</div>
+					{fullPage === "loading" && (
+						<p className="flex items-center gap-2 text-xs text-muted">
+							<Spinner />
+							{s.fullPageLoading}
+						</p>
+					)}
+					{fullPage === "failed" && <p className="text-xs text-muted">{s.fullPageFailed}</p>}
+					<fieldset className="space-y-1.5">
+						<legend className="mb-1.5 text-muted">{s.borrow}</legend>
+						{ASPECTS.map((aspect) => (
+							<label key={aspect} className="flex cursor-pointer items-center gap-2">
+								<input type="checkbox" checked={aspects.has(aspect)} onChange={() => toggle(aspect)} className="accent-accent" />
+								{s.aspects[aspect]}
+							</label>
+						))}
+					</fieldset>
+					{selection && <p className="text-xs text-muted">{s.selectionOnly(selection.elements.length)}</p>}
+					<Button variant="primary" disabled={!aspects.size} onClick={useAsReference} className="justify-center">
+						{s.useThis}
+					</Button>
+				</aside>
+			</div>
+			<IconButton label={s.close} onClick={onClose} className="absolute top-2.5 right-2.5">
+				<X size={16} />
+			</IconButton>
+		</Modal>
+	);
+}
