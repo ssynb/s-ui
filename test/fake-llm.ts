@@ -8,13 +8,13 @@ import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 
 export type ChatRequest = { model: string; messages: { role: string; content: unknown }[] };
 /** 自定义回复：返回一段文字，或一次工具调用（name + 参数）。 */
-export type FakeReply = { text: string } | { tool: string; args: object };
+export type FakeReply = { text: string } | { tool: string; args: object } | { httpError: number };
 
 function chunk(model: string, delta: object, finish: string | null = null) {
 	return `data: ${JSON.stringify({ id: "c", object: "chat.completion.chunk", created: 0, model, choices: [{ index: 0, delta, finish_reason: finish }] })}\n\n`;
 }
 
-function stream(model: string, r: FakeReply) {
+function stream(model: string, r: Exclude<FakeReply, { httpError: number }>) {
 	if ("text" in r) return [chunk(model, { role: "assistant", content: r.text }), chunk(model, {}, "stop")];
 	const call = { index: 0, id: `call_${Math.random().toString(36).slice(2)}`, type: "function", function: { name: r.tool, arguments: JSON.stringify(r.args) } };
 	return [chunk(model, { role: "assistant", tool_calls: [call] }), chunk(model, {}, "tool_calls")];
@@ -38,8 +38,10 @@ export async function startFakeLlm(dir: string, extraAuth: object = {}, respond?
 		for await (const part of req) raw += part;
 		const body = JSON.parse(raw) as ChatRequest;
 		requests.push(body);
+		const custom = respond?.(body);
+		if (custom && "httpError" in custom) return res.writeHead(custom.httpError, { "content-type": "application/json" }).end(JSON.stringify({ error: { message: "fake failure" } }));
 		res.writeHead(200, { "content-type": "text/event-stream" });
-		for (const line of respond ? stream(body.model, respond(body)) : reply(body)) res.write(line);
+		for (const line of custom ? stream(body.model, custom) : reply(body)) res.write(line);
 		res.end("data: [DONE]\n\n");
 	});
 	await new Promise<void>((r) => server.listen(0, "127.0.0.1", r));
