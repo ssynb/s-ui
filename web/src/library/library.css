@@ -1,5 +1,5 @@
 /* 组件库演示样式。参数经内联 CSS 变量传入：--d 时长、--e 缓动、--c 颜色、--r 圆角、--p 周期，其余见各段。
-   系统开启减弱动态时 styles.css 统一把时长压到 0，这里不重复处理。 */
+   系统开启减弱动态时 styles.css 把过渡和一次性动画压到 0；循环动画在文件末尾停掉，停在静止的终态。 */
 
 .lib-btn {
 	display: inline-flex;
@@ -49,7 +49,7 @@
 }
 
 .lib-spin {
-	animation: lib-spin var(--p, 800ms) linear infinite;
+	animation: lib-spin var(--p) linear infinite;
 }
 @keyframes lib-spin {
 	to {
@@ -135,7 +135,7 @@
 	margin-left: 1px;
 	vertical-align: -2px;
 	background: var(--accent);
-	animation: lib-blink 1s steps(1) infinite;
+	animation: lib-blink var(--p) steps(1) infinite;
 }
 @keyframes lib-blink {
 	50% {
@@ -386,4 +386,16 @@
 }
 .lib-card-tinted:hover {
 	background: color-mix(in oklab, var(--c) 13%, var(--panel));
+}
+
+/* 减弱动态：循环动画不播放（styles.css 只把时长压短，循环仍会以极短周期运行） */
+@media (prefers-reduced-motion: reduce) {
+	.lib-spin,
+	.lib-sheen,
+	.lib-caret,
+	.lib-dot,
+	.lib-bar::after,
+	.lib-beam::before {
+		animation: none !important;
+	}
 }

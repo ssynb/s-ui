@@ -38,6 +38,8 @@ function useFlash(stay: number) {
 	return [on, show] as const;
 }
 
+const SPIN_MS = 800;
+
 function ButtonDemo({ p, variant, slow, locale }: DemoProps) {
 	const [busy, setBusy] = useState(false);
 	const style = vars({ "--r": `${n(p, "radius")}px`, "--c": s(p, "color"), "--s": n(p, "scale") / 100, "--d": ms(n(p, "duration"), slow), "--e": s(p, "easing") });
@@ -50,11 +52,12 @@ function ButtonDemo({ p, variant, slow, locale }: DemoProps) {
 				className={cls}
 				style={style}
 				onClick={() => {
+					if (busy) return;
 					setBusy(true);
 					setTimeout(() => setBusy(false), 1200 * slow);
 				}}
 			>
-				{busy ? <span className="lib-spin block size-3.5 rounded-full border-2 border-current border-t-transparent" /> : pick(locale, "继续", "Continue")}
+				{busy ? <span className="lib-spin block size-3.5 rounded-full border-2 border-current border-t-transparent" style={vars({ "--p": ms(SPIN_MS, slow) })} /> : pick(locale, "继续", "Continue")}
 			</button>
 			<button type="button" disabled className={cls} style={style}>
 				{pick(locale, "不可用", "Disabled")}
@@ -140,7 +143,22 @@ function TabsDemo({ p, variant, slow, locale }: DemoProps) {
 	const c = s(p, "color");
 	const slide = { left: box.left, width: box.width, transition: `left ${d} ${s(p, "easing")}, width ${d} ${s(p, "easing")}` };
 	const tab = (label: string, i: number, className: string, style?: React.CSSProperties) => (
-		<button key={label} ref={ref(i)} type="button" role="tab" aria-selected={i === active} onClick={() => setActive(i)} className={`relative px-2.5 whitespace-nowrap ${className}`} style={{ transition: `color ${d}, background-color ${d}`, ...style }}>
+		<button
+			key={label}
+			ref={ref(i)}
+			type="button"
+			role="tab"
+			aria-selected={i === active}
+			tabIndex={i === active ? 0 : -1}
+			onClick={() => setActive(i)}
+			onKeyDown={(e) => {
+				const step = e.key === "ArrowRight" ? 1 : e.key === "ArrowLeft" ? -1 : 0;
+				if (!step) return;
+				const next = (active + step + labels.length) % labels.length;
+				setActive(next);
+				e.currentTarget.parentElement!.querySelectorAll<HTMLElement>("[role=tab]")[next]!.focus();
+			}}
+			className={`relative px-2.5 whitespace-nowrap ${className}`} style={{ transition: `color ${d}, background-color ${d}`, ...style }}>
 			{label}
 		</button>
 	);
@@ -237,10 +255,11 @@ function ToastDemo({ p, variant, slow, locale }: DemoProps) {
 	);
 }
 
-function EmptyDemo({ p, variant, locale }: DemoProps) {
+function EmptyDemo({ p, variant, slow, locale }: DemoProps) {
 	const c = s(p, "color");
 	const r = `${n(p, "radius")}px`;
 	const [over, setOver] = useState(false);
+	const [picked, setPicked] = useState(0);
 	const cta = (
 		<button type="button" className="inline-flex h-7 items-center gap-1 px-3 text-white hover:brightness-110" style={{ background: c, borderRadius: r }}>
 			<Plus size={14} />
@@ -269,21 +288,22 @@ function EmptyDemo({ p, variant, locale }: DemoProps) {
 		);
 	if (variant === "dropzone")
 		return (
-			<button
-				type="button"
+			<label
 				onDragEnter={() => setOver(true)}
 				onDragLeave={() => setOver(false)}
 				onDrop={(e) => {
 					e.preventDefault();
 					setOver(false);
+					setPicked(e.dataTransfer.files.length);
 				}}
 				onDragOver={(e) => e.preventDefault()}
-				className="grid h-[85%] w-[88%] place-content-center justify-items-center gap-1 border-2 border-dashed text-xs text-muted transition-colors hover:text-fg"
-				style={{ borderRadius: r, borderColor: over ? c : "var(--line)", background: over ? `color-mix(in oklab, ${c} 8%, transparent)` : "transparent" }}
+				className="grid h-[85%] w-[88%] cursor-pointer place-content-center justify-items-center gap-1 border-2 border-dashed text-center text-xs text-muted hover:text-fg focus-within:outline-2 focus-within:outline-accent"
+				style={{ borderRadius: r, borderColor: over ? c : "var(--line)", background: over ? `color-mix(in oklab, ${c} 8%, transparent)` : "transparent", transition: `color ${ms(150, slow)}, border-color ${ms(150, slow)}, background-color ${ms(150, slow)}` }}
 			>
+				<input type="file" multiple className="sr-only" onChange={(e) => setPicked(e.target.files?.length ?? 0)} />
 				<Upload size={18} />
-				{pick(locale, "把文件拖到这里，或点击选择", "Drop files here, or click to choose")}
-			</button>
+				{picked ? pick(locale, `已选择 ${picked} 个文件`, `${picked} file${picked === 1 ? "" : "s"} selected`) : pick(locale, "把文件拖到这里，或点击选择", "Drop files here, or click to choose")}
+			</label>
 		);
 	return (
 		<div className="relative grid w-[88%] gap-1.5">

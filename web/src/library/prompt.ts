@@ -55,7 +55,7 @@ export function buildPrompt(entry: PromptEntry, choice: Choice, target: Target, 
 		for (const spec of entry.params) lines.push(`- ${spec.label[locale]}${w.sep}${formatParam(spec, choice.params[spec.key] ?? spec.default, locale)}`);
 	}
 	lines.push(`${w.behavior}${w.sep}${entry.describe(choice.params, choice.variant)[locale]}`);
-	if (entry.states) lines.push(`${w.states}${w.sep}${entry.states[locale]}`);
+	lines.push(`${w.states}${w.sep}${entry.states[locale]}`);
 	if (others.length) {
 		lines.push(`${w.rejected}${w.sep}`);
 		for (const v of others) {

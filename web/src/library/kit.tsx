@@ -1,5 +1,5 @@
 import { RotateCcw } from "lucide-react";
-import { type CSSProperties, useLayoutEffect, useRef, useState } from "react";
+import { type CSSProperties, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
 import type { Locale } from "../i18n.ts";
 
 // 演示组件共用的小工具。
@@ -45,4 +45,18 @@ export function useIndicator(active: number, remeasure: unknown) {
 		refs.current[i] = el;
 	};
 	return { box, ref };
+}
+
+const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
+
+/** 系统是否要求减弱动态（跟随设置实时变化）。CSS 动画由 styles.css 与 library.css 处理，JS 驱动的演示用它直接给终态。 */
+export function useReducedMotion() {
+	return useSyncExternalStore(
+		(onChange) => {
+			const query = matchMedia(REDUCED_MOTION);
+			query.addEventListener("change", onChange);
+			return () => query.removeEventListener("change", onChange);
+		},
+		() => matchMedia(REDUCED_MOTION).matches,
+	);
 }

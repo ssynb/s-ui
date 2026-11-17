@@ -56,8 +56,8 @@ export type Entry = {
 	params: ParamSpec[];
 	/** 行为与动效描述，即“怎么跟 AI 说”，随参数实时变化。 */
 	describe: (p: ParamValues, variant: string) => Text;
-	/** 需要覆盖的状态。 */
-	states?: Text;
+	/** 需要覆盖的状态（每个条目都写，交给 AI 的需求必含）。 */
+	states: Text;
 	Demo: ComponentType<DemoProps>;
 	/** 演示区高度（px），默认按有无多种做法取值。 */
 	stageHeight?: number;

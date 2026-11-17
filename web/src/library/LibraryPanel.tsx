@@ -1,8 +1,9 @@
 import { CircleHelp, Search, Snail, X } from "lucide-react";
-import { useMemo, useState, useSyncExternalStore } from "react";
+import { useMemo, useState } from "react";
 import { IconButton } from "../ui.tsx";
 import type { PanelProps } from "../panels.ts";
 import { EntryCard } from "./EntryCard.tsx";
+import { useReducedMotion } from "./kit.tsx";
 import "./library.css";
 import type { Choice } from "./prompt.ts";
 import { CATEGORIES, ENTRIES } from "./registry.ts";
@@ -10,19 +11,6 @@ import { STRINGS } from "./strings.ts";
 import { type CategoryId, defaults, type Entry, SINGLE_VARIANT } from "./types.ts";
 
 const SLOW_FACTOR = 4;
-const REDUCED_MOTION = "(prefers-reduced-motion: reduce)";
-
-function useReducedMotion() {
-	return useSyncExternalStore(
-		(onChange) => {
-			const query = matchMedia(REDUCED_MOTION);
-			query.addEventListener("change", onChange);
-			return () => query.removeEventListener("change", onChange);
-		},
-		() => matchMedia(REDUCED_MOTION).matches,
-	);
-}
-
 /** 搜索不分界面语言：用户可能记得中文名，也可能记得英文名。 */
 function searchText(entry: Entry) {
 	const category = CATEGORIES.find((c) => c.id === entry.category)!;

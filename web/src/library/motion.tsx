@@ -1,5 +1,5 @@
 import { useEffect, useId, useRef, useState } from "react";
-import { ms, pick, Replay, restart, useIndicator, vars } from "./kit.tsx";
+import { ms, pick, Replay, restart, useIndicator, useReducedMotion, vars } from "./kit.tsx";
 import { color, duration, EASE_IN, EASE_OUT, easeName, easing, n, range, s, SPRING } from "./params.ts";
 import type { DemoProps, Entry } from "./types.ts";
 
@@ -41,6 +41,8 @@ function FocusDemo({ p, locale }: DemoProps) {
 	);
 }
 
+const SPIN_MS = 800;
+
 function LoadingDemo({ p, slow, locale }: DemoProps) {
 	const [busy, setBusy] = useState(false);
 	const d = ms(n(p, "duration"), slow);
@@ -51,13 +53,14 @@ function LoadingDemo({ p, slow, locale }: DemoProps) {
 			aria-busy={busy}
 			className="lib-btn grid min-w-28"
 			onClick={() => {
+				if (busy) return;
 				setBusy(true);
 				setTimeout(() => setBusy(false), 1600 * slow);
 			}}
 		>
 			<span style={layer(!busy)}>{pick(locale, "提交", "Submit")}</span>
 			<span style={layer(busy)} className="grid place-items-center">
-				<span className="lib-spin block size-4 rounded-full border-2 border-white/40 border-t-white" />
+				<span className="lib-spin block size-4 rounded-full border-2 border-white/40 border-t-white" style={vars({ "--p": ms(SPIN_MS, slow) })} />
 			</span>
 		</button>
 	);
@@ -388,16 +391,20 @@ const STREAM_TEXT = {
 	en: "Sure, I'll look at your page structure first, then make every button shrink slightly when pressed.",
 };
 
+const CARET_BLINK_MS = 1000;
+
 function StreamDemo({ p, slow, locale }: DemoProps) {
 	const [count, setCount] = useState(0);
 	const [run, setRun] = useState(0);
 	const text = STREAM_TEXT[locale];
 	const step = n(p, "speed") * slow;
+	const reduced = useReducedMotion();
 	useEffect(() => {
+		if (reduced) return setCount(text.length);
 		setCount(0);
 		const timer = setInterval(() => setCount((c) => (c >= text.length ? c : c + 1)), step);
 		return () => clearInterval(timer);
-	}, [run, text, step]);
+	}, [run, text, step, reduced]);
 	const done = count >= text.length;
 	return (
 		<>
@@ -407,7 +414,7 @@ function StreamDemo({ p, slow, locale }: DemoProps) {
 						{ch}
 					</span>
 				))}
-				<span className="lib-caret" style={{ opacity: done ? 0 : 1, transition: done ? `opacity ${ms(400, slow)}` : "none", animationPlayState: done ? "paused" : "running" }} />
+				<span className="lib-caret" style={{ ...vars({ "--p": ms(CARET_BLINK_MS, slow) }), opacity: done ? 0 : 1, transition: done ? `opacity ${ms(400, slow)}` : "none", animationPlayState: done ? "paused" : "running" }} />
 			</p>
 			<Replay locale={locale} onClick={() => setRun(run + 1)} />
 		</>
@@ -496,12 +503,26 @@ function GooeyDemo({ p, slow, locale }: DemoProps) {
 	);
 }
 
+const SWIPE_PX = 30;
+
 function FanDemo({ p, slow, locale }: DemoProps) {
 	const names = locale === "zh" ? ["律师", "会计", "设计", "编程", "运营"] : ["Law", "Tax", "Design", "Code", "Ops"];
 	const [active, setActive] = useState(2);
+	const swipe = useRef<{ x: number; moved: boolean }>({ x: 0, moved: false });
 	const t = `transform ${ms(n(p, "duration"), slow)} ${s(p, "easing")}, opacity ${ms(n(p, "duration"), slow)}`;
 	return (
-		<div className="relative h-32 w-full">
+		<div
+			className="relative h-32 w-full touch-pan-y select-none"
+			onPointerDown={(e) => {
+				swipe.current = { x: e.clientX, moved: false };
+			}}
+			onPointerUp={(e) => {
+				const dx = e.clientX - swipe.current.x;
+				if (Math.abs(dx) < SWIPE_PX) return;
+				swipe.current.moved = true;
+				setActive((a) => Math.min(names.length - 1, Math.max(0, a - Math.sign(dx))));
+			}}
+		>
 			{names.map((name, i) => {
 				const k = i - active;
 				return (
@@ -509,7 +530,7 @@ function FanDemo({ p, slow, locale }: DemoProps) {
 						key={name}
 						type="button"
 						aria-current={k === 0 || undefined}
-						onClick={() => setActive(i)}
+						onClick={() => !swipe.current.moved && setActive(i)}
 						className="absolute top-3 left-[calc(50%-28px)] grid h-20 w-14 place-items-center rounded-xl bg-raised text-xs font-semibold shadow-md ring-1 ring-line"
 						style={{
 							transform: `translateX(${k * n(p, "spread")}px) translateY(${Math.abs(k) * 8}px) rotate(${k * n(p, "angle")}deg) scale(${1 - Math.abs(k) * 0.12})`,
@@ -537,6 +558,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `按钮按下时缩到 ${n(p, "scale")}% 左右，松手立刻恢复（${timing(p).zh}），不要位移`,
 			en: `When pressed, the button shrinks to about ${n(p, "scale")}% and returns as soon as it is released (${timing(p).en}); it must not move`,
 		}),
+		states: { zh: "默认、按下（缩小）、松开（恢复）、禁用时不缩放", en: "default, pressed (shrunk), released (restored), no scaling when disabled" },
 		Demo: PressDemo,
 	},
 	{
@@ -549,6 +571,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `悬停时铺一层很淡的灰底（文字色 ${n(p, "intensity")}% 透明度），文字变深，${n(p, "duration")}ms 渐变；不要变色、不要放大`,
 			en: `On hover, lay a very faint tint (text color at ${n(p, "intensity")}% opacity) and darken the text, fading in over ${n(p, "duration")}ms; no color change, no scaling`,
 		}),
+		states: { zh: "默认、悬停（淡灰底）、按下、键盘聚焦", en: "default, hover (faint tint), pressed, keyboard focus" },
 		Demo: VeilDemo,
 	},
 	{
@@ -561,6 +584,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `键盘聚焦时显示 ${n(p, "width")}px 粗、颜色 ${s(p, "color")} 的光环，离元素 ${n(p, "offset")}px；鼠标点击时不显示（用 :focus-visible）`,
 			en: `When focused by keyboard, show a ${n(p, "width")}px ring in ${s(p, "color")}, ${n(p, "offset")}px away from the element; never on mouse click (use :focus-visible)`,
 		}),
+		states: { zh: "默认、键盘聚焦（显示光环）、鼠标点击后（不显示光环）", en: "default, keyboard focus (ring shown), after mouse click (no ring)" },
 		Demo: FocusDemo,
 	},
 	{
@@ -586,6 +610,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `开关的圆点滑过去（${timing(p).zh}），底色同时变成 ${s(p, "color")}；开就是终态，不要再弹提示`,
 			en: `The switch knob slides across (${timing(p).en}) while the track turns ${s(p, "color")}; the new position is the feedback, no extra toast`,
 		}),
+		states: { zh: "关、开、悬停、键盘聚焦、禁用", en: "off, on, hover, keyboard focus, disabled" },
 		Demo: SwitchDemo,
 	},
 	{
@@ -598,6 +623,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `切换时选中底块（圆角 ${n(p, "radius")}px）从旧位置滑到新位置，宽度跟着变（${timing(p).zh}），不要瞬间跳`,
 			en: `When switching, the highlight (${n(p, "radius")}px corners) slides from the old option to the new one and resizes to fit (${timing(p).en}); never jump`,
 		}),
+		states: { zh: "选中、未选中、悬停、键盘聚焦", en: "selected, unselected, hover, keyboard focus" },
 		Demo: SegmentDemo,
 	},
 	{
@@ -610,6 +636,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `菜单图标点开后三条线变形成关闭的 ×（${timing(p).zh}），再点原路变回`,
 			en: `When the menu opens, its three lines morph into a close × (${timing(p).en}) and morph back when closed`,
 		}),
+		states: { zh: "收起（菜单图标）、展开（关闭图标）、键盘聚焦", en: "closed (menu icon), open (close icon), keyboard focus" },
 		Demo: MorphDemo,
 	},
 	{
@@ -622,6 +649,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `输入有误时输入框左右轻晃两下（幅度 ${n(p, "distance")}px、共 ${n(p, "duration")}ms），边框变红，错误文字留在下方`,
 			en: `On invalid input, the field wiggles left and right twice (${n(p, "distance")}px, ${n(p, "duration")}ms total), its border turns red, and the error text stays below it`,
 		}),
+		states: { zh: "默认、聚焦、出错（抖动 + 红框 + 错误文字）、改正后恢复", en: "default, focused, error (shake + red border + message), restored after fixing" },
 		Demo: ShakeDemo,
 	},
 	{
@@ -634,6 +662,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `新内容从下方 ${n(p, "distance")}px 处淡入上移到位（${timing(p).zh}），首屏已有内容不要重播`,
 			en: `New content fades in while rising ${n(p, "distance")}px into place (${timing(p).en}); content already on screen does not replay it`,
 		}),
+		states: { zh: "出现前（透明、偏下）、出现后（到位）；已在屏幕上的内容保持不动", en: "before entering (transparent, lower), entered (in place); content already on screen stays still" },
 		Demo: FadeUpDemo,
 	},
 	{
@@ -646,6 +675,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `出现时用“${easeName(s(p, "easing")).zh}”，消失时用“${easeName(s(p, "exitEasing")).zh}”并比出现更快一点；开关和加号这类小件可以有轻微回弹`,
 			en: `Use “${easeName(s(p, "easing")).en}” when things appear and “${easeName(s(p, "exitEasing")).en}” when they leave, leaving a bit faster than entering; small pieces like switches may overshoot slightly`,
 		}),
+		states: { zh: "出现、消失（比出现更快）", en: "entering, leaving (faster than entering)" },
 		Demo: CurvesDemo,
 	},
 	{
@@ -658,6 +688,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `切换页面时整块推移（${timing(p).zh}）：新页从右侧推入，旧页向左退 ${n(p, "parallax")}%；返回时反方向`,
 			en: `Switching pages pushes the whole view (${timing(p).en}): the new page slides in from the right while the old one moves ${n(p, "parallax")}% to the left; going back reverses it`,
 		}),
+		states: { zh: "前进（新页从右推入）、返回（反方向）", en: "forward (new page pushes in from the right), back (reverse direction)" },
 		Demo: PushDemo,
 	},
 	{
@@ -670,6 +701,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `点卡片后，预览从这张卡的位置放大出来（${timing(p).zh}），关闭时缩回去`,
 			en: `After clicking a card, the preview grows out of that card's position (${timing(p).en}) and shrinks back into it when closed`,
 		}),
+		states: { zh: "收起（在来源位置）、展开、关闭（缩回来源）", en: "collapsed (at its origin), expanded, closing (shrinks back to origin)" },
 		Demo: ExpandDemo,
 	},
 	{
@@ -682,6 +714,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `展开时高度平滑增长（${timing(p).zh}），下方内容跟着让位，箭头同时翻转；收起原路返回，不要跳`,
 			en: `When expanding, the height grows smoothly (${timing(p).en}), content below moves along, and the arrow flips; collapsing reverses it, nothing jumps`,
 		}),
+		states: { zh: "收起、展开（箭头翻转）、键盘可操作", en: "collapsed, expanded (arrow flipped), operable by keyboard" },
 		Demo: AccordionDemo,
 	},
 	{
@@ -694,6 +727,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `保存成功在底部浮出一句“已保存”（${timing(p).zh}），停留 ${n(p, "stay") / 1000} 秒后淡出`,
 			en: `After saving, “Saved” floats up at the bottom (${timing(p).en}), stays ${n(p, "stay") / 1000}s, then fades out`,
 		}),
+		states: { zh: "出现、停留、离开；连续触发重新计时", en: "enter, stay, leave; repeated triggers restart the timer" },
 		Demo: ToastDemo,
 	},
 	{
@@ -707,6 +741,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			en: `A new row fades in at the top while the others slide down smoothly; a deleted row slides right and fades out while the rows below close the gap (${timing(p).en})`,
 		}),
 		stageHeight: 160,
+		states: { zh: "新增（顶部淡入）、删除（滑出淡出）、其余行补位", en: "added (fades in at top), removed (slides and fades out), remaining rows close the gap" },
 		Demo: ListDemo,
 	},
 	{
@@ -719,6 +754,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `卡片悬停时抬起 ${n(p, "lift")}px 并加深阴影（不透明度 ${n(p, "shadow")}%），按下时下沉 1px（${n(p, "duration")}ms）`,
 			en: `On hover the card lifts ${n(p, "lift")}px with a deeper shadow (${n(p, "shadow")}% opacity); pressing sinks it 1px (${n(p, "duration")}ms)`,
 		}),
+		states: { zh: "默认、悬停（抬起）、按下（下沉）、键盘聚焦", en: "default, hover (lifted), pressed (sunk), keyboard focus" },
 		Demo: LiftDemo,
 	},
 	{
@@ -731,6 +767,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `加载时用和最终内容同样形状的灰色占位（圆角 ${n(p, "radius")}px），一道微光每 ${n(p, "period") / 1000} 秒扫过一次；不要显示“暂无内容”`,
 			en: `While loading, show gray placeholders shaped like the final content (${n(p, "radius")}px corners) with a light sweeping across every ${n(p, "period") / 1000}s; never show “No content”`,
 		}),
+		states: { zh: "加载中（占位 + 微光）、加载完成（换成真实内容）、加载失败（单独提示）", en: "loading (placeholders + sweep), loaded (real content), failed (separate message)" },
 		Demo: SkeletonDemo,
 	},
 	{
@@ -743,6 +780,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `运行中的那一行文字加缓慢扫光（每 ${n(p, "period") / 1000} 秒一次），完成后变成静态灰字`,
 			en: `The line that is running gets a slow shimmer (one sweep every ${n(p, "period") / 1000}s) and turns into static gray text when done`,
 		}),
+		states: { zh: "进行中（扫光）、完成（静态灰字）", en: "in progress (shimmer), done (static gray text)" },
 		Demo: ShimmerDemo,
 	},
 	{
@@ -755,6 +793,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `回答逐字淡入（每字约 ${n(p, "speed")}ms，单字淡入 ${n(p, "fade")}ms），末尾跟一个闪烁光标，写完后光标淡出`,
 			en: `The answer appears character by character (about ${n(p, "speed")}ms each, each fading in over ${n(p, "fade")}ms) with a blinking caret at the end that fades out when done`,
 		}),
+		states: { zh: "输出中（逐字 + 光标）、输出完成（光标淡出）", en: "streaming (characters + caret), finished (caret fades out)" },
 		Demo: StreamDemo,
 	},
 	{
@@ -767,6 +806,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `数字变化时每一位上下滚动到新值（${timing(p).zh}），等宽数字不抖动；拖动滑块这类连续变化时直接跟手`,
 			en: `When the number changes, each digit rolls to its new value (${timing(p).en}) using tabular digits so nothing wobbles; follow continuous input such as sliders directly`,
 		}),
+		states: { zh: "数字变大、变小（各位按方向滚动）、连续拖动（直接跟手）", en: "value up, value down (digits roll accordingly), continuous drag (follows directly)" },
 		Demo: NumberDemo,
 	},
 	{
@@ -793,6 +833,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `这个按钮边缘跑一圈彩色流光（${s(p, "color")} → ${s(p, "color2")}，一圈 ${n(p, "period") / 1000} 秒），${p.mode === "once" ? "跑一圈后停下" : "一直循环"}`,
 			en: `A colored beam runs around this button's border (${s(p, "color")} → ${s(p, "color2")}, ${n(p, "period") / 1000}s per lap), ${p.mode === "once" ? "stopping after one lap" : "looping forever"}`,
 		}),
+		states: { zh: "流光进行中、停止后（普通边框）", en: "beam running, stopped (plain border)" },
 		Demo: BeamDemo,
 	},
 	{
@@ -805,6 +846,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `点加号后三个选项像液体一样从加号里分裂出来（${timing(p).zh}，粘稠度 ${n(p, "blur")}），收起时融回去；每屏最多一个这样的动效`,
 			en: `Tapping the plus splits three options out of it like liquid (${timing(p).en}, gooeyness ${n(p, "blur")}) and merges them back on close; at most one effect like this per screen`,
 		}),
+		states: { zh: "收起（融为一个加号）、展开（分裂成选项）、键盘聚焦", en: "closed (merged into the plus), open (split into options), keyboard focus" },
 		Demo: GooeyDemo,
 	},
 	{
@@ -817,6 +859,7 @@ export const MOTION_ENTRIES: Entry[] = [
 			zh: `卡片排成扇形，中间那张放大，两侧每张倾斜 ${n(p, "angle")}°、变小变淡，间距 ${n(p, "spread")}px；点两侧的卡换到中间（${timing(p).zh}），可左右滑动`,
 			en: `Cards form a fan: the center one is largest, each side card tilts ${n(p, "angle")}°, shrinks and fades, ${n(p, "spread")}px apart; clicking a side card brings it to the center (${timing(p).en}), swiping works too`,
 		}),
+		states: { zh: "中间（放大）、两侧（倾斜变淡）、切换中", en: "center (enlarged), sides (tilted and faded), switching" },
 		Demo: FanDemo,
 	},
 ];
