@@ -8,8 +8,11 @@ import type { ModuleApi } from "./protocol.ts";
 export type ModuleContext = {
 	/** 本机 pi 凭据与模型目录，可用来开一次性子会话。 */
 	modelRuntime: ModelRuntime;
-	/** 调用方当前打开的项目；未打开项目时为空。 */
-	project?: { dir: string; model: Model };
+	/**
+	 * 调用方当前打开的项目；未打开项目时为空。previewUrl 为预览页面地址（经 s-ui 转发），页面没跑起来时为空。
+	 * 会改项目文件的动作用 exclusive 包起来：对话 AI 在工作时拒绝执行，执行期间对话消息被拒绝。
+	 */
+	project?: { dir: string; model: Model; previewUrl?: string; exclusive: <T>(task: string, fn: () => Promise<T>) => Promise<T> };
 	/** 向发起调用的页面推送进度，可多次调用；数据形状由模块自己约定。 */
 	progress: (data: unknown) => void;
 };

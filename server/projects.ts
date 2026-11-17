@@ -1,6 +1,6 @@
 import { existsSync } from "node:fs";
-import { mkdir, readdir, readFile, writeFile } from "node:fs/promises";
-import { basename, dirname, join } from "node:path";
+import { cp, mkdir, readdir, readFile, rename, rm, writeFile } from "node:fs/promises";
+import { basename, dirname, join, sep } from "node:path";
 import type { FolderListing, Place } from "./protocol.ts";
 
 const MAX_RECENT = 20;
@@ -70,4 +70,19 @@ export function commonPlaces(home: string, platform = process.platform): Place[]
 	];
 	const drives: Place[] = platform === "win32" ? [...DRIVE_LETTERS].map((letter) => ({ key: "drive", path: `${letter}:\\` })) : [];
 	return [...places, ...drives].filter((p) => existsSync(p.path));
+}
+
+/**
+ * 示例项目在 s-ui 自己目录里的副本：第一次打开时复制（不含 node_modules），之后一直复用。
+ * 用户和 AI 改的是这份副本，仓库里的示例保持原样。
+ */
+export async function prepareExample(source: string, appHome: string) {
+	const target = join(appHome, "examples", basename(source));
+	if (existsSync(target)) return target;
+	// 先复制到临时目录再改名：中途失败不会留下半份副本被当成完整的。
+	const staging = `${target}.copying-${process.pid}`;
+	await rm(staging, { recursive: true, force: true });
+	await cp(source, staging, { recursive: true, filter: (src) => !src.split(sep).includes("node_modules") });
+	await rename(staging, target);
+	return target;
 }

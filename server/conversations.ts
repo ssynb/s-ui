@@ -9,6 +9,7 @@ import {
 	type ModelRuntime,
 	type SessionEntry,
 	SessionManager,
+	type ToolDefinition,
 	SettingsManager,
 } from "@earendil-works/pi-coding-agent";
 import { APP_HOME } from "./app-home.ts";
@@ -38,10 +39,18 @@ export function conversationsDir(sessionsRoot: string, projectDir: string) {
 	return join(sessionsRoot, `${basename(projectDir).replace(/[^\w.-]/g, "_")}-${hash}`);
 }
 
-type AgentOptions = { dir: string; modelRuntime: ModelRuntime; sessionManager: SessionManager; model?: Model };
+type AgentOptions = {
+	dir: string;
+	modelRuntime: ModelRuntime;
+	sessionManager: SessionManager;
+	model?: Model;
+	/** 只启用这些工具（含 customTools 里同名替换内置的）；不给时用默认工具。 */
+	tools?: string[];
+	customTools?: ToolDefinition[];
+};
 
 /** 创建 pi 会话；不传 model 时沿用会话记录里保存的模型。 */
-export async function createAgent({ dir, modelRuntime, sessionManager, model }: AgentOptions) {
+export async function createAgent({ dir, modelRuntime, sessionManager, model, tools, customTools }: AgentOptions) {
 	const settingsManager = SettingsManager.inMemory({});
 	const resourceLoader = new DefaultResourceLoader({
 		cwd: dir,
@@ -63,6 +72,8 @@ export async function createAgent({ dir, modelRuntime, sessionManager, model }: 
 		resourceLoader,
 		settingsManager,
 		sessionManager,
+		tools,
+		customTools,
 	});
 	return session;
 }

@@ -1,7 +1,9 @@
 // 「打磨」工具窗的后台模块：设计变量的状态、AI 整理、确定性写回。
-// 契约（冻结）：PolishApi 与这里导出的类型；实现待补（TODO），面板可先按类型开发。
+// 契约（冻结）：PolishApi 与这里导出的类型。
 import type { TokenName, TokenValues } from "../design-tokens.ts";
-import { defineModule } from "../module-kit.ts";
+import { defineModule, type ModuleContext } from "../module-kit.ts";
+import { organizeTokens } from "../organize-tokens.ts";
+import { readTokensStatus, saveTokens } from "../tokens-file.ts";
 
 export type PolishStatus = {
 	/** 项目里已有设计变量文件（TOKENS_FILE），且约定的变量都已定义。 */
@@ -44,11 +46,16 @@ export type PolishApi = {
 	saveTokens: { payload: { values: TokenValues; fontImports?: string[] }; result: PolishStatus };
 };
 
-const notImplemented = () => Promise.reject(new Error("polish module: not implemented yet"));
+function projectOf(ctx: ModuleContext) {
+	if (!ctx.project) throw new Error("Open a project first");
+	return ctx.project;
+}
 
-// TODO(后台)：实现三个动作。
 export const polishModule = defineModule<PolishApi>({
-	status: notImplemented,
-	organize: notImplemented,
-	saveTokens: notImplemented,
+	status: async (_payload, ctx) => readTokensStatus(projectOf(ctx).dir),
+	organize: async (_payload, ctx) => organizeTokens(projectOf(ctx), ctx.modelRuntime, ctx.progress),
+	saveTokens: async ({ values, fontImports }, ctx) => {
+		const project = projectOf(ctx);
+		return project.exclusive("saving design tokens", () => saveTokens(project.dir, values, fontImports));
+	},
 });

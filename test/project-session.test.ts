@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { cp, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ProjectSession } from "../server/project-session.ts";
 import type { SessionEvent } from "../server/protocol.ts";
 import { listUsableModels } from "../server/models.ts";
 
-const EXAMPLE = new URL("../examples/hello-page", import.meta.url).pathname;
+const EXAMPLE = fileURLToPath(new URL("../examples/hello-page", import.meta.url));
 const FAR_FUTURE = Date.now() + 365 * 24 * 3600 * 1000;
 
 async function runtimeWithAuth(auth: object) {
@@ -29,13 +30,14 @@ function nextEvent(session: ProjectSession, match: (e: SessionEvent) => boolean,
 	});
 }
 
-test("opening an existing front-end project installs deps, starts its dev server and stops it on dispose", async () => {
+test("opening an existing front-end project installs deps, starts its dev server and stops it on dispose", async (t) => {
 	const dir = await mkdtemp(join(tmpdir(), "s-ui-project-"));
 	await cp(EXAMPLE, dir, { recursive: true, filter: (src) => !src.includes("node_modules") });
 	const modelRuntime = await runtimeWithAuth({ openai: { type: "api_key", key: "sk-test" } });
 	const model = modelRuntime.getModel("openai", "gpt-4o")!;
 
 	const session = await ProjectSession.open({ dir, modelRuntime, model });
+	t.after(() => session.dispose());
 	const ready = await nextEvent(session, (e) => e.type === "preview" && (e.state === "ready" || e.state === "error"), 180_000);
 	assert.equal(ready.type === "preview" && ready.state, "ready", JSON.stringify(ready));
 	const url = (ready as Extract<SessionEvent, { type: "preview" }>).url!;

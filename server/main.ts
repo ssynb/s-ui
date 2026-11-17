@@ -6,6 +6,7 @@ import type { AddressInfo } from "node:net";
 import { existsSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { join, resolve } from "node:path";
+import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import tailwindcss from "@tailwindcss/vite";
@@ -16,11 +17,11 @@ import { DEFAULT_MODEL, listUsableModels, modelKey } from "./models.ts";
 import { APP_HOME } from "./app-home.ts";
 import { dispatchModule, MODULES } from "./modules.ts";
 import { ProjectSession } from "./project-session.ts";
-import { commonPlaces, createProjectFolder, listFolder, RecentProjects } from "./projects.ts";
+import { commonPlaces, createProjectFolder, listFolder, prepareExample, RecentProjects } from "./projects.ts";
 import type { ClientMessage, ServerMessage } from "./protocol.ts";
 
-const WEB_ROOT = new URL("../web", import.meta.url).pathname;
-const EXAMPLE_DIR = new URL("../examples/hello-page", import.meta.url).pathname;
+const WEB_ROOT = fileURLToPath(new URL("../web", import.meta.url));
+const EXAMPLE_SOURCE = fileURLToPath(new URL("../examples/hello-page", import.meta.url));
 
 const { values: flags } = parseArgs({
 	options: { port: { type: "string", default: "5180" }, "no-open": { type: "boolean", default: false } },
@@ -28,6 +29,8 @@ const { values: flags } = parseArgs({
 
 const modelRuntime = await ModelRuntime.create();
 const recentProjects = await RecentProjects.load(join(APP_HOME, "config.json"));
+// “打开示例项目”打开的是 s-ui 目录里的副本，不是仓库里被跟踪的示例。
+const EXAMPLE_DIR = await prepareExample(EXAMPLE_SOURCE, APP_HOME);
 const HOME = homedir();
 const PLACES = commonPlaces(HOME);
 type OpenedSession = { id: string; session: ProjectSession };
@@ -99,7 +102,12 @@ function connect(ws: WebSocket) {
 			const session = msg.sessionId ? sessionsById.get(msg.sessionId) : undefined;
 			const ctx = {
 				modelRuntime,
-				project: session && { dir: session.dir, model: session.model },
+				project: session && {
+					dir: session.dir,
+					model: session.model,
+					previewUrl: session.previewUrl,
+					exclusive: <T>(task: string, fn: () => Promise<T>) => session.runExclusive(task, fn),
+				},
 				progress: (data: unknown) => send({ type: "moduleProgress", requestId: msg.requestId, data }),
 			};
 			return send({ type: "moduleResult", requestId: msg.requestId, result: await dispatchModule(MODULES, msg, ctx) });

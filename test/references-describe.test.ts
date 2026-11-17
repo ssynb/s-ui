@@ -64,7 +64,7 @@ after(() => {
 
 test("in a project with no page yet, finding similar products works from the user's description and keeps only pages that open", async () => {
 	const emptyProject = await mkdtemp(join(tmpdir(), "s-ui-empty-project-"));
-	const ctx: ModuleContext = { modelRuntime, project: { dir: emptyProject, model: modelRuntime.getModel("fake", "fake-1")! }, progress: () => {} };
+	const ctx: ModuleContext = { modelRuntime, project: { dir: emptyProject, model: modelRuntime.getModel("fake", "fake-1")!, exclusive: (_task, fn) => fn() }, progress: () => {} };
 	const description = "an online shop for my specialty coffee roastery";
 
 	const result = (await dispatchModule(MODULES, { module: "references", action: "findSimilar", payload: { locale: "en", description } }, ctx)) as FindResult;

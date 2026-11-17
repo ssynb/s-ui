@@ -1,5 +1,5 @@
 import { MousePointer2, PenLine, RotateCw, X } from "lucide-react";
-import { type ReactNode, useEffect, useRef, useState } from "react";
+import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
 import type { PageCapture } from "../../server/page-capture.ts";
 import { type Annotation, PAGE_CAPTURE_MESSAGE, type Point } from "../../server/protocol.ts";
 import type { T } from "./i18n.ts";
@@ -164,14 +164,15 @@ type PreviewProps = {
 	onSubmitSelection: (text: string) => void;
 	/** 项目还没有页面（预览状态 empty）时预览区显示的内容。 */
 	empty: ReactNode;
+	/** 预览 iframe；由上层持有，预览操作（PanelProps.preview）也经它通信。 */
+	frame: RefObject<HTMLIFrameElement | null>;
 };
 
-export function Preview({ t, preview, selection, onSelectionChange, onSubmitSelection, empty }: PreviewProps) {
+export function Preview({ t, preview, selection, onSelectionChange, onSubmitSelection, empty, frame }: PreviewProps) {
 	const [annotating, setAnnotating] = useState(false);
 	const [capturing, setCapturing] = useState<Stroke>();
 	const [error, setError] = useState("");
 	const [reloads, setReloads] = useState(0);
-	const frame = useRef<HTMLIFrameElement>(null);
 	const latestCapture = useRef(0);
 	const url = preview?.state === "ready" ? preview.url : undefined;
 

@@ -17,7 +17,12 @@ async function setup(t: TestContext, extraAuth: object = {}) {
 	const llm = await startFakeLlm(piDir, extraAuth);
 	t.after(llm.close);
 	const model = llm.modelRuntime.getModel("fake", "fake-1")!;
-	const open = () => ProjectSession.open({ dir: project, modelRuntime: llm.modelRuntime, model, sessionsDir });
+	// 失败时也要释放会话，测试进程才能退出。
+	const open = async () => {
+		const session = await ProjectSession.open({ dir: project, modelRuntime: llm.modelRuntime, model, sessionsDir });
+		t.after(() => session.dispose());
+		return session;
+	};
 	return { llm, open };
 }
 
