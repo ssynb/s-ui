@@ -9,11 +9,15 @@ export type RefCard = { name: string; url: string; why: string; image?: string; 
 export const jpegSrc = (base64: string) => `data:image/jpeg;base64,${base64}`;
 export const hostOf = (url: string) => new URL(url).host.replace(/^www\./, "");
 
-export function CardGrid({ children }: { children: ReactNode }) {
-	return <ul className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3">{children}</ul>;
+/** compact：窄栏里固定两列。 */
+export function CardGrid({ children, compact }: { children: ReactNode; compact?: boolean }) {
+	return <ul className={compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3"}>{children}</ul>;
 }
 
-export function ReferenceCard({ locale, card, onOpen }: { locale: Locale; card: RefCard; onOpen: (card: RefCard) => void }) {
+type CardProps = { locale: Locale; card: RefCard; onOpen: (card: RefCard) => void; compact?: boolean };
+
+/** compact 只显示截图和名字，网址与理由在大图里看。 */
+export function ReferenceCard({ locale, card, onOpen, compact }: CardProps) {
 	const s = STRINGS[locale];
 	const ready = Boolean(card.image);
 	return (
@@ -23,7 +27,7 @@ export function ReferenceCard({ locale, card, onOpen }: { locale: Locale; card: 
 				disabled={!ready}
 				aria-label={s.openFull(card.name)}
 				onClick={() => onOpen(card)}
-				className="group block w-full overflow-hidden rounded-lg text-left ring-1 ring-line hover:ring-accent disabled:cursor-default disabled:hover:ring-line"
+				className="group block w-full overflow-hidden rounded-md text-left ring-1 ring-line hover:ring-accent disabled:cursor-default disabled:hover:ring-line"
 			>
 				<div className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-app">
 					{card.image ? (
@@ -35,13 +39,15 @@ export function ReferenceCard({ locale, card, onOpen }: { locale: Locale; card: 
 					)}
 				</div>
 			</button>
-			<p className="mt-1.5 truncate font-medium" title={card.name}>
+			<p className={`truncate font-medium ${compact ? "mt-1 text-xs" : "mt-1.5"}`} title={card.name}>
 				{card.name}
 			</p>
-			<a href={card.url} target="_blank" rel="noreferrer" className="block truncate text-xs text-muted hover:text-accent">
-				{hostOf(card.url)}
-			</a>
-			{card.why && <p className="mt-0.5 line-clamp-2 text-xs text-pretty">{card.why}</p>}
+			{!compact && (
+				<a href={card.url} target="_blank" rel="noreferrer" className="block truncate text-xs text-muted hover:text-accent">
+					{hostOf(card.url)}
+				</a>
+			)}
+			{card.why && !compact && <p className="mt-0.5 line-clamp-2 text-xs text-pretty">{card.why}</p>}
 		</li>
 	);
 }

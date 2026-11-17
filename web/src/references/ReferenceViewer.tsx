@@ -1,15 +1,20 @@
 import { ExternalLink, X } from "lucide-react";
 import { useEffect, useState } from "react";
 import type { ReferencesApi } from "../../../server/modules/references.ts";
-import type { PanelProps } from "../panels.ts";
+import type { AiSubmission, PanelProps } from "../panels.ts";
 import { Button, IconButton, Modal, Spinner } from "../ui.tsx";
 import { hostOf, jpegSrc, type RefCard } from "./ReferenceCard.tsx";
 import { ASPECTS, type Aspect, STRINGS } from "./strings.ts";
 
-type Props = PanelProps & { card: RefCard & { image: string }; onClose: () => void };
+export type OpenCard = RefCard & { image: string };
+
+/** 大图里的主按钮：文案和交给 AI 的内容。默认是「参考这个」改当前页面（有圈选时只改圈选部分）。 */
+export type ViewerAction = { label: string; compose: (card: OpenCard, aspects: Aspect[]) => AiSubmission };
+
+type Props = PanelProps & { card: OpenCard; onClose: () => void; action?: ViewerAction };
 
 /** 大图：先显示首屏，整页长截图拍好后换上，可滚动查看；右侧选参考哪些方面，交给 AI。 */
-export function ReferenceViewer({ card, onClose, locale, selection, callModule, submitToAi, showChat }: Props) {
+export function ReferenceViewer({ card, onClose, action, locale, selection, callModule, submitToAi, showChat }: Props) {
 	const s = STRINGS[locale];
 	const [fullPage, setFullPage] = useState<string | "loading" | "failed">("loading");
 	const [aspects, setAspects] = useState<Set<Aspect>>(() => new Set(ASPECTS));
@@ -26,14 +31,18 @@ export function ReferenceViewer({ card, onClose, locale, selection, callModule, 
 		setAspects(next);
 	};
 
-	const useAsReference = () => {
-		const withSelection = Boolean(selection);
-		const chosen = ASPECTS.filter((a) => aspects.has(a));
-		submitToAi({
-			text: s.instruction({ name: card.name, url: card.url, aspects: chosen, withSelection }),
-			images: [{ data: card.image, mimeType: "image/jpeg" }],
-			withSelection,
-		});
+	const restyle: ViewerAction = {
+		label: s.useThis,
+		compose: ({ name, url, image }, chosen) => ({
+			text: s.instruction({ name, url, aspects: chosen, withSelection: Boolean(selection) }),
+			images: [{ data: image, mimeType: "image/jpeg" }],
+			withSelection: Boolean(selection),
+		}),
+	};
+	const { label, compose } = action ?? restyle;
+
+	const submit = () => {
+		submitToAi(compose(card, ASPECTS.filter((a) => aspects.has(a))));
 		showChat();
 		onClose();
 	};
@@ -69,9 +78,9 @@ export function ReferenceViewer({ card, onClose, locale, selection, callModule, 
 							</label>
 						))}
 					</fieldset>
-					{selection && <p className="text-xs text-muted">{s.selectionOnly(selection.elements.length)}</p>}
-					<Button variant="primary" disabled={!aspects.size} onClick={useAsReference} className="justify-center">
-						{s.useThis}
+					{selection && !action && <p className="text-xs text-muted">{s.selectionOnly(selection.elements.length)}</p>}
+					<Button variant="primary" disabled={!aspects.size} onClick={submit} className="justify-center">
+						{label}
 					</Button>
 				</aside>
 			</div>

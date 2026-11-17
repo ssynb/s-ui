@@ -1,11 +1,15 @@
-import type { Locale } from "../i18n.ts";
-
+import { DESIGN_TOKENS, TOKENS_FILE } from "../../../server/design-tokens.ts";
 import type { RejectReason } from "../../../server/modules/references.ts";
+import type { Locale } from "../i18n.ts";
 
 export type Aspect = "layout" | "color" | "typography" | "components";
 export const ASPECTS: Aspect[] = ["layout", "color", "typography", "components"];
 
 type Instruction = { name: string; url: string; aspects: Aspect[]; withSelection: boolean };
+type BuildInstruction = { name: string; url: string; aspects: Aspect[]; description: string };
+
+// 照参考搭页面时，要求 AI 按「打磨」的设计变量约定生成变量文件，之后可以直接打磨。变量清单是给 AI 的技术约定，两种语言共用。
+const TOKEN_LIST = DESIGN_TOKENS.map((t) => `- ${t.name}: ${t.meaning}`).join("\n");
 
 // 「参考页面」工具窗的全部文案。两种语言同时补齐，类型会检查缺漏。
 const en = {
@@ -45,6 +49,22 @@ const en = {
 	useThis: "Use as reference",
 	openInBrowser: "Open in browser",
 	close: "Close",
+	startTitle: "Start from a page you like",
+	startHint: "Pick a reference and the AI builds your page in its layout, colors and type. Describe what you want to make to see similar products first.",
+	describeLabel: "What do you want to make? (optional)",
+	describePlaceholder: "e.g. a website for my specialty coffee shop",
+	findForDescription: "Find similar",
+	buildThis: "Build it like this",
+	building: "The AI is building your page from the reference…",
+	build: ({ name, url, aspects, description }: BuildInstruction) =>
+		[
+			`Build the first page of this project, using the attached page (${name}, ${url}) as the design reference.`,
+			`What to build: ${description || "a page of the same kind as the reference, for our own product"}.`,
+			`Follow its: ${aspects.map((a) => en.aspects[a].toLowerCase()).join(", ")}.`,
+			"Write our own content; don't copy its text, images or logo.",
+			`Put all design values in ${TOKENS_FILE}: define every variable below on :root, import that file first from the main stylesheet, and use var(...) for every font, color, radius, shadow and spacing instead of hard-coded values. Load web fonts with @import url(...) at the top of ${TOKENS_FILE}.`,
+			TOKEN_LIST,
+		].join("\n"),
 	instruction: ({ name, url, aspects, withSelection }: Instruction) =>
 		[
 			`Use the attached page (${name}, ${url}) as a design reference to improve ${withSelection ? "the part of our page I circled" : "our page"}.`,
@@ -93,6 +113,22 @@ const zh: typeof en = {
 	useThis: "参考这个",
 	openInBrowser: "在浏览器打开",
 	close: "关闭",
+	startTitle: "先选一个参考定基调",
+	startHint: "选一个喜欢的页面，AI 会照它的版式、配色和字体搭出你的页面。写下想做什么，可以先看同类产品。",
+	describeLabel: "想做什么？（可选）",
+	describePlaceholder: "如：精品咖啡店官网",
+	findForDescription: "找同类",
+	buildThis: "照这个做",
+	building: "AI 正在照参考搭页面…",
+	build: ({ name, url, aspects, description }) =>
+		[
+			`参考附图里的页面（${name}，${url}）搭出这个项目的第一个页面。`,
+			`要做的是：${description || "和参考同类的页面，用于我们自己的产品"}。`,
+			`参考它的：${aspects.map((a) => zh.aspects[a]).join("、")}。`,
+			"内容用我们自己的，不照搬它的文字、图片和标志。",
+			`所有设计取值放进 ${TOKENS_FILE}：在 :root 上定义下面每个变量，由主样式表最先引入这个文件；字体、颜色、圆角、阴影、间距一律用 var(...)，不写死数值。网页字体用 @import url(...) 写在 ${TOKENS_FILE} 顶部。`,
+			TOKEN_LIST,
+		].join("\n"),
 	instruction: ({ name, url, aspects, withSelection }) =>
 		[
 			`参考附图里的页面（${name}，${url}）改进${withSelection ? "我圈选的部分" : "当前页面"}。`,

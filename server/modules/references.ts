@@ -19,8 +19,11 @@ export type FindResult = { product: ProductGuess; references: Reference[]; dropp
 
 /** 动作名 → { payload, result }。 */
 export type ReferencesApi = {
-	/** 读当前项目，找同类真实产品的对应页面，逐个打开验证并截首屏。 */
-	findSimilar: { payload: { locale: "en" | "zh" }; result: FindResult };
+	/**
+	 * 找同类真实产品的对应页面，逐个打开验证并截首屏。给了 description（项目还没有页面时用户想做什么）就按描述判断，
+	 * 不读项目文件；否则读当前项目。
+	 */
+	findSimilar: { payload: { locale: "en" | "zh"; description?: string }; result: FindResult };
 	/** 打开一个网页截图（首屏或整页），结果按 URL 缓存。 */
 	capture: { payload: { url: string; fullPage?: boolean }; result: Shot };
 };
@@ -29,10 +32,11 @@ const toReference = (candidate: Candidate, shot: Shot): Reference | undefined =>
 	shot.ok ? { ...candidate, title: shot.title, image: shot.image } : undefined;
 
 export const referencesModule = defineModule<ReferencesApi>({
-	findSimilar: async ({ locale }, ctx) => {
+	findSimilar: async ({ locale, description }, ctx) => {
 		if (!ctx.project) throw new Error("No project is open");
 		ctx.progress({ phase: "reading" } satisfies FindProgress);
-		const { product, candidates } = await guessSimilarProducts(ctx.project.dir, ctx.modelRuntime, ctx.project.model, locale);
+		const { dir, model } = ctx.project;
+		const { product, candidates } = await guessSimilarProducts({ dir, modelRuntime: ctx.modelRuntime, model, locale, description: description?.trim() || undefined });
 		ctx.progress({ phase: "checking", product, total: candidates.length } satisfies FindProgress);
 		const checked = await Promise.all(
 			candidates.map(async (candidate) => {
