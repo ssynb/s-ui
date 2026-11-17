@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useRef, useState } from "react";
 import type { Annotation } from "../../server/protocol.ts";
 import { Chat } from "./Chat.tsx";
 import { ConversationActions } from "./ConversationActions.tsx";
@@ -19,7 +19,8 @@ export function Workspace({ t, locale, workspace }: Props) {
 	const [activeWindow, setActiveWindow] = useState(CHAT_WINDOW);
 	const [selection, setSelection] = useState<Annotation>();
 	const previewUrl = state.preview?.state === "ready" ? state.preview.url : undefined;
-	const preview = usePreviewControl(previewUrl);
+	const frame = useRef<HTMLIFrameElement>(null);
+	const preview = usePreviewControl(frame, previewUrl);
 
 	// 对话框、画圈弹框和各工具窗面板交给 AI 的唯一入口。
 	const submitToAi = ({ text, images, withSelection }: AiSubmission) => {
@@ -66,6 +67,7 @@ export function Workspace({ t, locale, workspace }: Props) {
 				onSelectionChange={setSelection}
 				onSubmitSelection={(text) => submitToAi({ text, withSelection: true })}
 				empty={<StartFromReference panel={panelProps} defaultMessage={t.previewEmpty} />}
+				frame={frame}
 			/>
 		</main>
 	);

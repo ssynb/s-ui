@@ -3,12 +3,13 @@ import assert from "node:assert/strict";
 import { cp, mkdtemp, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
+import { fileURLToPath } from "node:url";
 import { ModelRuntime } from "@earendil-works/pi-coding-agent";
 import { ProjectSession } from "../server/project-session.ts";
 import type { SessionEvent } from "../server/protocol.ts";
 import { listUsableModels } from "../server/models.ts";
 
-const EXAMPLE = new URL("../examples/hello-page", import.meta.url).pathname;
+const EXAMPLE = fileURLToPath(new URL("../examples/hello-page", import.meta.url));
 const FAR_FUTURE = Date.now() + 365 * 24 * 3600 * 1000;
 
 async function runtimeWithAuth(auth: object) {

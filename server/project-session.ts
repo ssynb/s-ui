@@ -94,6 +94,11 @@ export class ProjectSession {
 		return this.#agent.model as Model;
 	}
 
+	/** 预览页面地址（经预览代理）；页面没跑起来时为空。 */
+	get previewUrl() {
+		return this.#preview.state === "ready" ? this.#preview.url : undefined;
+	}
+
 	/** 订阅事件；订阅时先重放当前对话、对话列表、模型、预览和运行状态。 */
 	subscribe(listener: Listener) {
 		this.#listeners.add(listener);
@@ -150,7 +155,9 @@ export class ProjectSession {
 		return this.#agent.abort();
 	}
 
+	/** 释放会话、停掉 dev server 与预览代理；可重复调用。 */
 	async dispose() {
+		if (this.#disposed) return;
 		this.#disposed = true;
 		this.#listeners.clear();
 		await this.#queue;
