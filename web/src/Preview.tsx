@@ -1,5 +1,5 @@
 import { MousePointer2, PenLine, RotateCw, X } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import type { PageCapture } from "../../server/page-capture.ts";
 import { type Annotation, PAGE_CAPTURE_MESSAGE, type Point } from "../../server/protocol.ts";
 import type { T } from "./i18n.ts";
@@ -162,9 +162,11 @@ type PreviewProps = {
 	onSelectionChange: (selection?: Annotation) => void;
 	/** 在画圈弹框里写了一句话并发送。 */
 	onSubmitSelection: (text: string) => void;
+	/** 项目还没有页面（预览状态 empty）时预览区显示的内容。 */
+	empty: ReactNode;
 };
 
-export function Preview({ t, preview, selection, onSelectionChange, onSubmitSelection }: PreviewProps) {
+export function Preview({ t, preview, selection, onSelectionChange, onSubmitSelection, empty }: PreviewProps) {
 	const [annotating, setAnnotating] = useState(false);
 	const [capturing, setCapturing] = useState<Stroke>();
 	const [error, setError] = useState("");
@@ -232,7 +234,12 @@ export function Preview({ t, preview, selection, onSelectionChange, onSubmitSele
 				{url ? (
 					<iframe key={reloads} ref={frame} title={t.previewTab} src={url} className="absolute inset-0 h-full w-full border-0 bg-white" />
 				) : (
-					preview && <PreviewStatus t={t} preview={preview} />
+					preview &&
+					(preview.state === "empty" ? (
+						<div className="h-full overflow-auto">{empty}</div>
+					) : (
+						<PreviewStatus t={t} preview={preview} />
+					))
 				)}
 				{url && annotating && (
 					<AnnotationLayer

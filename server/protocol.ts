@@ -6,6 +6,8 @@ export type Viewport = { width: number; height: number };
 
 /** 工作台请预览 iframe 采集现场时 postMessage 用的消息类型（请求与回复相同）。 */
 export const PAGE_CAPTURE_MESSAGE = "s-ui:page-capture";
+/** 工作台操作预览页面（临时样式层、字体、识别组件、读设计变量）时 postMessage 用的消息类型（请求与回复相同）。 */
+export const PREVIEW_OP_MESSAGE = "s-ui:preview-op";
 
 /** 用户在预览上画的圈：坐标是预览视口内的 CSS 像素；capture 是预览页面在画圈那一刻的现场。 */
 export type Annotation = { stroke: Point[]; viewport: Viewport; capture: PageCapture };

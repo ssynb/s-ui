@@ -1,11 +1,15 @@
-// 工具窗面板契约（冻结）：左侧工具窗条上的每个面板（组件库、参考页面……）都是一个 PanelDefinition，
+// 工具窗面板契约（冻结）：左侧工具窗条上的每个面板（打磨、参考页面……）都是一个 PanelDefinition，
 // 只通过 PanelProps 与工作台交互。改这里的类型会同时影响所有面板，需要先和各面板负责人对齐。
 import type { LucideIcon } from "lucide-react";
 import type { ComponentType } from "react";
+import type { OrganizeProgress, OrganizeResult, PolishApi, PolishStatus } from "../../server/modules/polish.ts";
+import type { ComponentKind, FoundComponent, PageInspection } from "../../server/page-inspect.ts";
 import type { ImageAttachment, ModuleApi } from "../../server/protocol.ts";
 import type { Locale } from "./i18n.ts";
+import type { TokenValues } from "../../server/design-tokens.ts";
 
-export type { ImageAttachment, Locale, ModuleApi };
+export { DESIGN_TOKENS, TOKENS_FILE, type TokenGroup, type TokenName, type TokenValues } from "../../server/design-tokens.ts";
+export type { ComponentKind, FoundComponent, ImageAttachment, Locale, ModuleApi, OrganizeProgress, OrganizeResult, PageInspection, PolishApi, PolishStatus };
 
 /** 当前打开的项目。工具窗只在打开项目后出现，所以总是有值。 */
 export type ProjectInfo = {
@@ -41,6 +45,27 @@ export type CallModule = <Api extends ModuleApi, A extends keyof Api & string>(
 	options?: { onProgress?: (data: unknown) => void },
 ) => Promise<Api[A]["result"]>;
 
+/**
+ * 操作当前预览页面，立即生效、不改源码、不经 AI。
+ * 临时样式层与字体只存在于预览里：页面刷新或热更新后由工作台自动重新注入，直到 clearLayer / clearAll；
+ * 圈选采集的是用户看到的页面，所以包含这些临时样式。预览未就绪时各方法失败。
+ */
+export type PreviewControl = {
+	/** 预览页面已跑起来且可以操作。 */
+	ready: boolean;
+	/** 注入或替换一层临时样式（按 id；后注入的层在上面，覆盖页面自身样式）。 */
+	applyLayer: (id: string, css: string) => Promise<void>;
+	clearLayer: (id: string) => Promise<void>;
+	/** 清掉全部临时样式层和 loadFonts 加载的字体。 */
+	clearAll: () => Promise<void>;
+	/** 加载网页字体样式表（如 Google Fonts 的 css2 地址），之后样式层里即可使用这些字体。 */
+	loadFonts: (stylesheetUrls: string[]) => Promise<void>;
+	/** 识别页面里实际存在的组件、字体与颜色。 */
+	inspect: () => Promise<PageInspection>;
+	/** 读页面上当前生效的设计变量（含临时样式层的覆盖），未定义的变量不出现。 */
+	readTokens: () => Promise<TokenValues>;
+};
+
 export type PanelProps = {
 	/** 当前界面语言；面板用它从自己的 strings.ts 取文案。 */
 	locale: Locale;
@@ -53,7 +78,20 @@ export type PanelProps = {
 	/** 切到对话工具窗，通常在 submitToAi 之后调用，让用户看到 AI 的回复。 */
 	showChat: () => void;
 	callModule: CallModule;
+	preview: PreviewControl;
 };
+
+/**
+ * 参考页面工作者导出、供其他面板嵌入的部件（web/src/references/SimilarProducts.tsx）：
+ * 同类产品参考，与「参考页面」工具窗共用同一项目的查找结果（不重复查找），compact 时适合放进窄栏。
+ */
+export type SimilarProductsProps = { panel: PanelProps; compact?: boolean };
+
+/**
+ * 空项目（预览状态 empty）时预览区显示的部件（web/src/references/StartFromReference.tsx），由工作台在预览区渲染。
+ * defaultMessage 是框架原来的空状态提示。
+ */
+export type StartFromReferenceProps = { panel: PanelProps; defaultMessage: string };
 
 export type PanelDefinition = {
 	/** 稳定的标识，用于工具窗切换。 */

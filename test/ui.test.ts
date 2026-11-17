@@ -71,8 +71,8 @@ test("switching tool windows keeps the chat draft, and each tool window shows it
 
 	const draft = page.getByRole("textbox", { name: "Describe the page you want, or what to change…" });
 	await draft.fill("make the header sticky");
-	await page.getByRole("tab", { name: "Component library" }).click();
-	await page.getByRole("tabpanel", { name: "Component library" }).waitFor();
+	await page.getByRole("tab", { name: "Polish" }).click();
+	await page.getByRole("tabpanel", { name: "Polish" }).waitFor();
 	assert.equal(await draft.isVisible(), false);
 	await page.getByRole("tab", { name: "Reference pages" }).click();
 	await page.getByRole("tabpanel", { name: "Reference pages" }).waitFor();

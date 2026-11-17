@@ -1,12 +1,12 @@
 import { MessageSquare } from "lucide-react";
 import { type ReactNode, useState } from "react";
 import type { Locale, T } from "./i18n.ts";
-import { libraryPanel } from "./library/index.ts";
 import type { PanelDefinition, PanelProps } from "./panels.ts";
+import { polishPanel } from "./polish/index.ts";
 import { referencesPanel } from "./references/index.ts";
 
 /** 对话之外的工具窗，按在工具窗条上的顺序排列。新增工具窗：写一个 PanelDefinition，在这里加一项。 */
-const PANELS: PanelDefinition[] = [libraryPanel, referencesPanel];
+const PANELS: PanelDefinition[] = [polishPanel, referencesPanel];
 
 export const CHAT_WINDOW = "chat";
 

@@ -6,7 +6,9 @@ import type { Locale, T } from "./i18n.ts";
 import type { AiSubmission, PanelProps } from "./panels.ts";
 import { projectName } from "./paths.ts";
 import { Preview } from "./Preview.tsx";
+import { StartFromReference } from "./references/StartFromReference.tsx";
 import { CHAT_WINDOW, ToolWindows } from "./ToolWindows.tsx";
+import { usePreviewControl } from "./usePreviewControl.ts";
 import type { useWorkspace } from "./useWorkspace.ts";
 
 type Props = { t: T; locale: Locale; workspace: ReturnType<typeof useWorkspace> };
@@ -17,6 +19,7 @@ export function Workspace({ t, locale, workspace }: Props) {
 	const [activeWindow, setActiveWindow] = useState(CHAT_WINDOW);
 	const [selection, setSelection] = useState<Annotation>();
 	const previewUrl = state.preview?.state === "ready" ? state.preview.url : undefined;
+	const preview = usePreviewControl(previewUrl);
 
 	// 对话框、画圈弹框和各工具窗面板交给 AI 的唯一入口。
 	const submitToAi = ({ text, images, withSelection }: AiSubmission) => {
@@ -33,6 +36,7 @@ export function Workspace({ t, locale, workspace }: Props) {
 		submitToAi,
 		showChat: () => setActiveWindow(CHAT_WINDOW),
 		callModule: workspace.callModule,
+		preview,
 	};
 
 	return (
@@ -61,6 +65,7 @@ export function Workspace({ t, locale, workspace }: Props) {
 				selection={selection}
 				onSelectionChange={setSelection}
 				onSubmitSelection={(text) => submitToAi({ text, withSelection: true })}
+				empty={<StartFromReference panel={panelProps} defaultMessage={t.previewEmpty} />}
 			/>
 		</main>
 	);
