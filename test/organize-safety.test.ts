@@ -50,12 +50,12 @@ test("organizing runs only while the chat AI is idle, and chat messages are refu
 	session.subscribe((e) => events.push(e));
 
 	let release!: () => void;
-	const organizing = session.runExclusive("organize", () => new Promise<void>((r) => (release = r)));
+	const organizing = session.runExclusive("organizing", () => new Promise<void>((r) => (release = r)));
 	await new Promise((r) => setImmediate(r));
 	await session.prompt("change the header");
 	assert.equal(llm.requests.length, 0, "the chat message must not reach the AI while organizing");
 	assert.ok(events.some((e) => e.type === "error" && /organiz/i.test(e.message)));
-	await assert.rejects(session.runExclusive("organize", async () => {}), /organiz/i);
+	await assert.rejects(session.runExclusive("organizing", async () => {}), /organiz/i);
 
 	release();
 	await organizing;

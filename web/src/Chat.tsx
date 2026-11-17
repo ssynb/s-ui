@@ -2,7 +2,7 @@ import { ArrowUp, Check, ChevronRight, Square, X } from "lucide-react";
 import { useLayoutEffect, useRef, useState } from "react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
-import type { T } from "./i18n.ts";
+import { errorText, type T } from "./i18n.ts";
 import { IconButton, Spinner } from "./ui.tsx";
 import type { ChatItem } from "./useWorkspace.ts";
 
@@ -55,6 +55,27 @@ function ToolGroup({ t, tools }: { t: T; tools: ToolItem[] }) {
 	);
 }
 
+const COLLAPSED_LINES = 4;
+const COLLAPSED_CHARS = 280;
+
+/** 面板发来的长需求默认只露出开头几行，可展开全部。 */
+function UserText({ t, text }: { t: T; text: string }) {
+	const [expanded, setExpanded] = useState(false);
+	const lines = text.split("\n");
+	const long = lines.length > COLLAPSED_LINES || text.length > COLLAPSED_CHARS;
+	const head = lines.slice(0, COLLAPSED_LINES).join("\n").slice(0, COLLAPSED_CHARS);
+	return (
+		<>
+			<p className="whitespace-pre-wrap [overflow-wrap:anywhere]">{long && !expanded ? `${head.trimEnd()}…` : text}</p>
+			{long && (
+				<button type="button" aria-expanded={expanded} onClick={() => setExpanded((e) => !e)} className="mt-1 text-xs text-accent hover:underline">
+					{expanded ? t.showLess : t.showAll}
+				</button>
+			)}
+		</>
+	);
+}
+
 function Message({ t, item }: { t: T; item: Exclude<ChatItem, ToolItem> }) {
 	switch (item.kind) {
 		case "user":
@@ -63,7 +84,7 @@ function Message({ t, item }: { t: T; item: Exclude<ChatItem, ToolItem> }) {
 					{item.images.map((src, i) => (
 						<img key={i} src={src} alt={t.attachedImage} className="mb-2 rounded-md ring-1 ring-line" />
 					))}
-					<p className="whitespace-pre-wrap">{item.text}</p>
+					<UserText t={t} text={item.text} />
 				</div>
 			);
 		case "assistant":
@@ -75,7 +96,7 @@ function Message({ t, item }: { t: T; item: Exclude<ChatItem, ToolItem> }) {
 		case "error":
 			return (
 				<p role="alert" className="rounded-md bg-danger/10 px-3 py-2 whitespace-pre-wrap text-danger">
-					{item.text}
+					{errorText(t, { code: item.code, message: item.text })}
 				</p>
 			);
 	}
@@ -98,16 +119,24 @@ function useFollowLatest(deps: unknown) {
 	return { ref, onScroll };
 }
 
-type ChatProps = { t: T; items: ChatItem[]; busy: boolean; onSend: (text: string) => void; onStop: () => void };
+type ChatProps = {
+	t: T;
+	items: ChatItem[];
+	busy: boolean;
+	/** 输入锁定的原因（如正在整理设计设置）；有值时不能发消息，草稿保留。 */
+	locked?: string;
+	onSend: (text: string) => void;
+	onStop: () => void;
+};
 
-export function Chat({ t, items, busy, onSend, onStop }: ChatProps) {
+export function Chat({ t, items, busy, locked, onSend, onStop }: ChatProps) {
 	const [draft, setDraft] = useState("");
 	const scroller = useFollowLatest(items);
 	const streaming = items.at(-1)?.kind === "assistant";
 
 	const submit = () => {
 		const text = draft.trim();
-		if (!text) return;
+		if (!text || locked) return;
 		onSend(text);
 		setDraft("");
 	};
@@ -136,19 +165,27 @@ export function Chat({ t, items, busy, onSend, onStop }: ChatProps) {
 							submit();
 						}
 					}}
+					disabled={Boolean(locked)}
 					aria-label={t.chatPlaceholder}
-					placeholder={t.chatPlaceholder}
+					placeholder={locked ?? t.chatPlaceholder}
 					rows={3}
-					className="block w-full resize-none bg-transparent px-3 pt-2.5 placeholder:text-faint focus:outline-none"
+					className="block w-full resize-none bg-transparent px-3 pt-2.5 placeholder:text-faint focus:outline-none disabled:cursor-not-allowed"
 				/>
 				<div className="flex items-center gap-2 px-2 pb-2">
-					<span className="flex-1 truncate pl-1 text-xs text-faint">{t.sendHint}</span>
+					{locked ? (
+						<span role="status" className="flex flex-1 items-center gap-1.5 truncate pl-1 text-xs text-muted">
+							<Spinner className="text-accent" />
+							{locked}
+						</span>
+					) : (
+						<span className="flex-1 truncate pl-1 text-xs text-faint">{t.sendHint}</span>
+					)}
 					{busy ? (
 						<IconButton label={t.stop} onClick={onStop} className="bg-hover text-fg">
 							<Square size={12} fill="currentColor" />
 						</IconButton>
 					) : (
-						<IconButton type="submit" label={t.send} disabled={!draft.trim()} className="bg-accent text-white hover:bg-accent-hover hover:text-white">
+						<IconButton type="submit" label={t.send} disabled={!draft.trim() || Boolean(locked)} className="bg-accent text-white hover:bg-accent-hover hover:text-white">
 							<ArrowUp size={16} />
 						</IconButton>
 					)}

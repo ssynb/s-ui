@@ -18,7 +18,7 @@ import { APP_HOME } from "./app-home.ts";
 import { dispatchModule, MODULES } from "./modules.ts";
 import { ProjectSession } from "./project-session.ts";
 import { commonPlaces, createProjectFolder, listFolder, prepareExample, RecentProjects } from "./projects.ts";
-import type { ClientMessage, ServerMessage } from "./protocol.ts";
+import type { ClientMessage, ExclusiveTask, ServerMessage } from "./protocol.ts";
 
 const WEB_ROOT = fileURLToPath(new URL("../web", import.meta.url));
 const EXAMPLE_SOURCE = fileURLToPath(new URL("../examples/hello-page", import.meta.url));
@@ -106,7 +106,7 @@ function connect(ws: WebSocket) {
 					dir: session.dir,
 					model: session.model,
 					previewUrl: session.previewUrl,
-					exclusive: <T>(task: string, fn: () => Promise<T>) => session.runExclusive(task, fn),
+					exclusive: <T>(task: ExclusiveTask, fn: () => Promise<T>) => session.runExclusive(task, fn),
 				},
 				progress: (data: unknown) => send({ type: "moduleProgress", requestId: msg.requestId, data }),
 			};

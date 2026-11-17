@@ -7,6 +7,7 @@ import { createAgent, toolSummary } from "./conversations.ts";
 import { DESIGN_TOKENS, TOKENS_FILE } from "./design-tokens.ts";
 import type { Model } from "./models.ts";
 import type { OrganizeProgress, OrganizeResult } from "./modules/polish.ts";
+import type { ExclusiveTask } from "./protocol.ts";
 import { readTokensStatus } from "./tokens-file.ts";
 import { WriteLedger } from "./write-ledger.ts";
 
@@ -24,13 +25,13 @@ Do not change markup, content or behaviour. You can read and edit files; you can
 Edit carefully: in minified CSS keep every brace and semicolon balanced; after editing, re-read each changed file to check it is still valid.
 Finish with one short sentence describing what you changed.`;
 
-const FIX_PROMPT = `After your changes the page no longer looks the same. The first attached image is the page before, the second is now.
+const FIX_PROMPT = `After your changes the page no longer looks the same. The attached images come in pairs, before then now: first at desktop width (1280px), then at phone width (390px).
 Find what broke (often a missing brace or semicolon, a wrong variable, or a changed value) and fix it so the page looks exactly like before, still using the design tokens. Reply with one short sentence.`;
 
 const UNDONE_SUMMARY = "Organizing changed how the page looks and could not be fixed, so its changes were undone.";
 const keptNote = (kept: string[]) => (kept.length ? ` Files changed by someone else meanwhile were left as they are: ${kept.join(", ")}.` : "");
 
-type Project = { dir: string; model: Model; previewUrl?: string; exclusive: <T>(task: string, fn: () => Promise<T>) => Promise<T> };
+type Project = { dir: string; model: Model; previewUrl?: string; exclusive: <T>(task: ExclusiveTask, fn: () => Promise<T>) => Promise<T> };
 type Progress = (data: OrganizeProgress) => void;
 
 async function ask(agent: AgentSession, text: string, images?: Buffer[]) {
@@ -68,7 +69,7 @@ async function organizeAndVerify(project: Project, modelRuntime: ModelRuntime, p
 		let shotAfter = await screenshotPage(previewUrl);
 		if (await sameAppearance(shotBefore, shotAfter)) return { summary, appearanceUnchanged: true };
 
-		summary = await ask(agent, FIX_PROMPT, [shotBefore, shotAfter]);
+		summary = await ask(agent, FIX_PROMPT, shotBefore.flatMap((before, i) => [before, shotAfter[i]!]));
 		progress({ phase: "verifying" });
 		shotAfter = await screenshotPage(previewUrl);
 		if (await sameAppearance(shotBefore, shotAfter)) return { summary, appearanceUnchanged: true };
@@ -85,7 +86,7 @@ async function organizeAndVerify(project: Project, modelRuntime: ModelRuntime, p
  * 中途任何失败都先撤销整理的写入再报错。
  */
 export function organizeTokens(project: Project, modelRuntime: ModelRuntime, progress: Progress): Promise<OrganizeResult> {
-	return project.exclusive("organizing design tokens", async () => {
+	return project.exclusive("organizing", async () => {
 		const status = await readTokensStatus(project.dir);
 		if (status.organized) return { ...status, changedFiles: [], summary: "Design tokens are already organized." };
 

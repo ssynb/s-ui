@@ -1,26 +1,43 @@
-// 页面外观比较：同一视口下整页截图，逐像素比对（允许抗锯齿级别的微小差异）。
+// 页面外观比较：桌面与手机两种宽度下各截一张整页图，逐像素比对（允许抗锯齿级别的微小差异）。
 import { chromium } from "playwright";
 
-const VIEWPORT = { width: 1280, height: 800 };
+/** 桌面宽度与手机宽度：只有窄屏才出现的样式（媒体查询）也要核对。 */
+const VIEWPORTS = [
+	{ width: 1280, height: 800 },
+	{ width: 390, height: 844 },
+];
 /** 单个像素任一通道差超过它才算不同。 */
 const CHANNEL_TOLERANCE = 24;
 /** 不同像素占比不超过它，视为外观一致。 */
 const MAX_DIFFERENT_RATIO = 0.002;
 
+/** 页面在每种宽度下的整页截图，顺序同 VIEWPORTS。 */
 export async function screenshotPage(url: string) {
 	const browser = await chromium.launch();
 	try {
-		const page = await browser.newPage({ viewport: VIEWPORT, deviceScaleFactor: 1 });
-		await page.goto(url, { waitUntil: "networkidle" });
-		await page.evaluate(() => document.fonts.ready);
-		return await page.screenshot({ type: "png", fullPage: true });
+		const shots: Buffer[] = [];
+		for (const viewport of VIEWPORTS) {
+			const page = await browser.newPage({ viewport, deviceScaleFactor: 1 });
+			await page.goto(url, { waitUntil: "networkidle" });
+			await page.evaluate(() => document.fonts.ready);
+			shots.push(await page.screenshot({ type: "png", fullPage: true }));
+			await page.close();
+		}
+		return shots;
 	} finally {
 		await browser.close();
 	}
 }
 
-/** 两张截图尺寸相同、几乎每个像素都一样时为 true。 */
-export async function sameAppearance(before: Buffer, after: Buffer) {
+/** 每种宽度下前后两张截图都尺寸相同、几乎每个像素都一样时为 true。 */
+export async function sameAppearance(before: Buffer[], after: Buffer[]) {
+	for (const [i, shot] of before.entries()) {
+		if (!(await sameImage(shot, after[i]!))) return false;
+	}
+	return true;
+}
+
+async function sameImage(before: Buffer, after: Buffer) {
 	const browser = await chromium.launch();
 	try {
 		const page = await browser.newPage();

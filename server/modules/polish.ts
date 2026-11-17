@@ -56,6 +56,6 @@ export const polishModule = defineModule<PolishApi>({
 	organize: async (_payload, ctx) => organizeTokens(projectOf(ctx), ctx.modelRuntime, ctx.progress),
 	saveTokens: async ({ values, fontImports }, ctx) => {
 		const project = projectOf(ctx);
-		return project.exclusive("saving design tokens", () => saveTokens(project.dir, values, fontImports));
+		return project.exclusive("savingTokens", () => saveTokens(project.dir, values, fontImports));
 	},
 });

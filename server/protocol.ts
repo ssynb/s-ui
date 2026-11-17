@@ -22,6 +22,9 @@ export type ModuleApi = Record<string, { payload: unknown; result: unknown }>;
 
 export type PreviewState = "empty" | "installing" | "starting" | "ready" | "error" | "stopped";
 
+/** 独占项目文件的任务：执行期间对话消息被拒绝。 */
+export type ExclusiveTask = "organizing" | "savingTokens";
+
 /** 项目里的一次对话（pi 会话）。 */
 export type ConversationInfo = { id: string; title: string; updatedAt: number };
 
@@ -32,13 +35,16 @@ export type SessionEvent =
 	| { type: "conversations"; list: ConversationInfo[] }
 	/** 当前使用的模型（provider/id），切换后下一条消息起生效。 */
 	| { type: "model"; model: string }
+	/** 独占任务开始（task）或结束（无 task）；订阅时有进行中的任务也会重放。 */
+	| { type: "exclusive"; task?: ExclusiveTask }
 	| { type: "preview"; state: PreviewState; url?: string; message?: string }
 	| { type: "user"; text: string; images: string[] }
 	| { type: "assistant_delta"; text: string }
 	| { type: "assistant_end" }
 	| { type: "tool"; phase: "start" | "end"; id: string; name: string; summary: string; isError?: boolean }
 	| { type: "busy"; busy: boolean }
-	| { type: "error"; message: string };
+	/** code 为界面可翻译的错误码（如 busy:organizing），没有时显示 message。 */
+	| { type: "error"; message: string; code?: string };
 
 export type ModelInfo = { id: string; label: string };
 

@@ -3,6 +3,7 @@ import type {
 	Annotation,
 	ClientMessage,
 	ConversationInfo,
+	ExclusiveTask,
 	FolderListing,
 	ImageAttachment,
 	ModelInfo,
@@ -16,7 +17,7 @@ export type ChatItem =
 	| { kind: "user"; text: string; images: string[] }
 	| { kind: "assistant"; text: string; streaming: boolean }
 	| { kind: "tool"; id: string; name: string; summary: string; status: "running" | "done" | "error" }
-	| { kind: "error"; text: string };
+	| { kind: "error"; text: string; code?: string };
 
 export type Preview = Extract<SessionEvent, { type: "preview" }>;
 export type RequestError = { code?: string; message: string };
@@ -32,6 +33,8 @@ type State = {
 	sessionId?: string;
 	dir?: string;
 	sessionModel?: string;
+	/** 正在独占项目文件的任务（如整理设计设置）；期间对话输入锁定。 */
+	exclusive?: ExclusiveTask;
 	conversationId?: string;
 	conversations: ConversationInfo[];
 	preview?: Preview;
@@ -63,6 +66,8 @@ function applySessionEvent(state: State, e: SessionEvent): State {
 			return { ...state, conversations: e.list };
 		case "model":
 			return { ...state, sessionModel: e.model };
+		case "exclusive":
+			return { ...state, exclusive: e.task };
 		case "preview":
 			return { ...state, preview: e };
 		case "busy":
@@ -76,7 +81,7 @@ function applySessionEvent(state: State, e: SessionEvent): State {
 		case "tool":
 			return { ...state, items: applyTool(state.items, e) };
 		case "error":
-			return { ...state, items: [...state.items, { kind: "error", text: e.message }] };
+			return { ...state, items: [...state.items, { kind: "error", text: e.message, code: e.code }] };
 	}
 }
 
@@ -100,7 +105,7 @@ function reducer(state: State, action: Action): State {
 			return { ...state, recentProjects: action.projects };
 		case "opened":
 			// 随后的订阅重放会带来当前对话、对话列表、模型和预览状态。
-			return { ...state, sessionId: action.sessionId, dir: action.dir, sessionModel: action.model, preview: undefined, busy: false, items: [] };
+			return { ...state, sessionId: action.sessionId, dir: action.dir, sessionModel: action.model, exclusive: undefined, preview: undefined, busy: false, items: [] };
 		case "event":
 			return action.sessionId === state.sessionId ? applySessionEvent(state, action.event) : state;
 		case "folder":
@@ -109,7 +114,7 @@ function reducer(state: State, action: Action): State {
 			return state;
 		case "error":
 			// 带 requestId 的失败由发起请求的地方显示；其余进对话流。
-			return action.requestId ? state : { ...state, items: [...state.items, { kind: "error", text: action.message }] };
+			return action.requestId ? state : { ...state, items: [...state.items, { kind: "error", text: action.message, code: action.code }] };
 	}
 }
 

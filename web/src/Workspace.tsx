@@ -58,7 +58,16 @@ export function Workspace({ t, locale, workspace }: Props) {
 						onSwitch={workspace.switchConversation}
 					/>
 				}
-				chat={<Chat t={t} items={state.items} busy={state.busy} onSend={(text) => submitToAi({ text })} onStop={workspace.abort} />}
+				chat={
+					<Chat
+						t={t}
+						items={state.items}
+						busy={state.busy}
+						locked={state.exclusive && t.exclusive[state.exclusive]}
+						onSend={(text) => submitToAi({ text })}
+						onStop={workspace.abort}
+					/>
+				}
 			/>
 			<Preview
 				t={t}

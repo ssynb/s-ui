@@ -40,6 +40,9 @@ const en = {
 		EPERM: "No permission to access this folder",
 		ENOTDIR: "This isn't a folder",
 		EINVAL: "The project name must be a single folder name",
+		"busy:organizing": "Design settings are being organized. Send your message when that finishes.",
+		"busy:savingTokens": "Design settings are being saved. Try again in a moment.",
+		"busy:ai": "The AI is still working on the project. Try again when it finishes.",
 	} as Record<string, string>,
 
 	chatTitle: "AI chat",
@@ -53,6 +56,9 @@ const en = {
 	sendHint: "Enter to send · Shift+Enter for a new line",
 	toolsSummary: (n: number) => (n === 1 ? "Ran 1 action" : `Ran ${n} actions`),
 	attachedImage: "Attached image",
+	exclusive: { organizing: "Organizing design settings…", savingTokens: "Saving design settings…" },
+	showAll: "Show all",
+	showLess: "Show less",
 	toolWindows: "Tool windows",
 
 	previewTab: "Preview",
@@ -122,6 +128,9 @@ const zh: Messages = {
 		EPERM: "没有权限访问这个文件夹",
 		ENOTDIR: "这不是一个文件夹",
 		EINVAL: "项目名称只能是一个文件夹名",
+		"busy:organizing": "正在整理设计设置，整理完再发消息。",
+		"busy:savingTokens": "正在保存设计设置，请稍后再试。",
+		"busy:ai": "AI 还在处理这个项目，等它完成后再试。",
 	},
 
 	chatTitle: "AI 对话",
@@ -135,6 +144,9 @@ const zh: Messages = {
 	sendHint: "Enter 发送 · Shift+Enter 换行",
 	toolsSummary: (n: number) => `执行了 ${n} 个操作`,
 	attachedImage: "附带的图片",
+	exclusive: { organizing: "正在整理设计设置…", savingTokens: "正在保存设计设置…" },
+	showAll: "展开全部",
+	showLess: "收起",
 	toolWindows: "工具窗",
 
 	previewTab: "预览",

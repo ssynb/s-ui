@@ -33,6 +33,8 @@ function nextEvent(session: ProjectSession, match: (e: SessionEvent) => boolean,
 test("opening an existing front-end project installs deps, starts its dev server and stops it on dispose", async (t) => {
 	const dir = await mkdtemp(join(tmpdir(), "s-ui-project-"));
 	await cp(EXAMPLE, dir, { recursive: true, filter: (src) => !src.includes("node_modules") });
+	// 服务生命周期测试使用固定页面，不依赖用户是否改过示例的内容。
+	await writeFile(join(dir, "index.html"), "<!doctype html><h1>Lifecycle fixture</h1>");
 	const modelRuntime = await runtimeWithAuth({ openai: { type: "api_key", key: "sk-test" } });
 	const model = modelRuntime.getModel("openai", "gpt-4o")!;
 
@@ -41,7 +43,7 @@ test("opening an existing front-end project installs deps, starts its dev server
 	const ready = await nextEvent(session, (e) => e.type === "preview" && (e.state === "ready" || e.state === "error"), 180_000);
 	assert.equal(ready.type === "preview" && ready.state, "ready", JSON.stringify(ready));
 	const url = (ready as Extract<SessionEvent, { type: "preview" }>).url!;
-	assert.match(await (await fetch(url)).text(), /Hello from the example page/);
+	assert.match(await (await fetch(url)).text(), /Lifecycle fixture/);
 
 	await session.dispose();
 	await assert.rejects(fetch(url));
