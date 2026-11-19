@@ -14,6 +14,7 @@ type Pending = { resolve: (result: unknown) => void; reject: (error: Error) => v
  */
 export function usePreviewControl(frame: RefObject<HTMLIFrameElement | null>, previewUrl?: string): PreviewControl {
 	const [ready, setReady] = useState(false);
+	const [pageHref, setPageHref] = useState<string>();
 	const readyRef = useRef(false);
 	const pending = useRef(new Map<number, Pending>());
 	const nextId = useRef(0);
@@ -41,9 +42,11 @@ export function usePreviewControl(frame: RefObject<HTMLIFrameElement | null>, pr
 			setReady(value);
 		};
 		setState(false);
+		setPageHref(undefined);
 		if (!previewUrl) return;
 		const origin = new URL(previewUrl).origin;
-		const becameReady = () => {
+		const becameReady = (href: unknown) => {
+			if (typeof href === "string") setPageHref(href.split("#", 1)[0]);
 			if (!cleared.current) {
 				cleared.current = true;
 				send({ name: "clearAll" }).then(() => setState(true), () => setState(false));
@@ -52,7 +55,12 @@ export function usePreviewControl(frame: RefObject<HTMLIFrameElement | null>, pr
 		const onMessage = (e: MessageEvent) => {
 			if (e.origin !== origin || e.source !== frame.current?.contentWindow || e.data?.type !== PREVIEW_OP_MESSAGE) return;
 			const data = e.data as PreviewAnnouncement | PreviewOpReply;
-			if ("event" in data) return data.event === "ready" ? becameReady() : setState(false);
+			if ("event" in data) {
+				if (data.event === "ready") becameReady(data.href);
+				else if (data.event === "leaving") setState(false);
+				else setPageHref(data.href);
+				return;
+			}
 			const waiter = pending.current.get(data.id);
 			pending.current.delete(data.id);
 			if (data.ok) waiter?.resolve(data.result);
@@ -68,12 +76,13 @@ export function usePreviewControl(frame: RefObject<HTMLIFrameElement | null>, pr
 		const op = <T>(o: PreviewOp) => (readyRef.current ? (send(o) as Promise<T>) : Promise.reject(new Error("Preview is not ready")));
 		return {
 			ready,
-			applyLayer: (id, css) => op<void>({ name: "applyLayer", id, css }),
+			pageHref,
+			applyLayer: (id, css, pageHref) => op<void>({ name: "applyLayer", id, css, pageHref }),
 			clearLayer: (id) => op<void>({ name: "clearLayer", id }),
 			clearAll: () => op<void>({ name: "clearAll" }),
 			loadFonts: (urls) => op<void>({ name: "loadFonts", urls }),
 			inspect: () => op<PageInspection>({ name: "inspect" }),
 			readTokens: () => op<TokenValues>({ name: "readTokens" }),
 		};
-	}, [ready, previewUrl]);
+	}, [ready, pageHref, previewUrl]);
 }

@@ -53,8 +53,10 @@ export type CallModule = <Api extends ModuleApi, A extends keyof Api & string>(
 export type PreviewControl = {
 	/** 预览页面已跑起来且可以操作。 */
 	ready: boolean;
+	/** 当前 iframe 实际地址；站内导航也会更新，不含锚点。 */
+	pageHref?: string;
 	/** 注入或替换一层临时样式（按 id；后注入的层在上面，覆盖页面自身样式）。 */
-	applyLayer: (id: string, css: string) => Promise<void>;
+	applyLayer: (id: string, css: string, pageHref?: string) => Promise<void>;
 	clearLayer: (id: string) => Promise<void>;
 	/** 清掉全部临时样式层和 loadFonts 加载的字体。 */
 	clearAll: () => Promise<void>;

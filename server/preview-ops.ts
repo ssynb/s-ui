@@ -5,7 +5,7 @@ import type { PageInspection } from "./page-inspect.ts";
 /** 工作台发给预览的操作。 */
 export type PreviewOp =
 	| { name: "ping" }
-	| { name: "applyLayer"; id: string; css: string }
+	| { name: "applyLayer"; id: string; css: string; pageHref?: string }
 	| { name: "clearLayer"; id: string }
 	| { name: "clearAll" }
 	| { name: "loadFonts"; urls: string[] }
@@ -16,7 +16,7 @@ export type PreviewOp =
 export type PreviewOpRequest = { type: string; id: number; op: PreviewOp };
 export type PreviewOpReply = { type: string; id: number; ok: true; result: unknown } | { type: string; id: number; ok: false; error: string };
 /** ready：桥接已就绪（页面每次加载一次）；leaving：页面即将卸载（刷新、跳转）。 */
-export type PreviewAnnouncement = { type: string; event: "ready" | "leaving" };
+export type PreviewAnnouncement = { type: string; event: "ready" | "leaving" | "navigated"; href?: string };
 
 type Config = { allowed: string[]; type: string; tokenNames: string[]; inspect: () => PageInspection };
 
@@ -25,7 +25,7 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 	const LAYER = "data-sui-layer";
 	const FONT = "data-sui-font";
 	const FONT_TIMEOUT_MS = 5000;
-	type Saved = { layers: [id: string, css: string][]; fonts: string[] };
+	type Saved = { layers: [id: string, css: string, pageHref?: string][]; fonts: string[] };
 
 	const load = (): Saved => {
 		try {
@@ -34,6 +34,8 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 			return { layers: [], fonts: [] };
 		}
 	};
+	const routeOf = (href: string) => href.split("#", 1)[0]!;
+	let currentRoute = routeOf(location.href);
 	let saved = load();
 	const persist = () => sessionStorage.setItem(STORE, JSON.stringify(saved));
 
@@ -81,12 +83,15 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 	const run = async (op: { name: string; [key: string]: unknown }): Promise<unknown> => {
 		switch (op.name) {
 			case "ping":
-				return true;
+				return location.href;
 			case "applyLayer": {
 				const id = String(op.id);
-				const at = saved.layers.findIndex(([layer]) => layer === id);
-				if (at >= 0) saved.layers[at] = [id, String(op.css)];
-				else saved.layers.push([id, String(op.css)]);
+				const pageHref = typeof op.pageHref === "string" ? routeOf(op.pageHref) : undefined;
+				if (pageHref !== undefined && pageHref !== currentRoute) throw new Error("Preview navigated");
+				const layer: Saved["layers"][number] = pageHref === undefined ? [id, String(op.css)] : [id, String(op.css), pageHref];
+				const at = saved.layers.findIndex(([key]) => key === id);
+				if (at >= 0) saved.layers[at] = layer;
+				else saved.layers.push(layer);
 				break;
 			}
 			case "clearLayer":
@@ -116,6 +121,29 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 		return undefined;
 	};
 
+	const pruneLayers = () => {
+		const kept = saved.layers.filter(([, , href]) => !href || href === currentRoute);
+		if (kept.length === saved.layers.length) return;
+		saved.layers = kept;
+		persist();
+		renderLayers();
+	};
+	const navigated = () => {
+		const route = routeOf(location.href);
+		if (route === currentRoute) return;
+		currentRoute = route;
+		pruneLayers();
+		parent.postMessage({ type, event: "navigated", href: route }, "*");
+	};
+	for (const name of ["pushState", "replaceState"] as const) {
+		const original = history[name];
+		history[name] = function (...args: Parameters<History[typeof name]>) {
+			original.apply(this, args);
+			navigated();
+		};
+	}
+	addEventListener("popstate", navigated);
+	pruneLayers();
 	renderLayers();
 	renderFonts();
 	new MutationObserver(keepOnTop).observe(document.documentElement, { childList: true });
@@ -129,9 +157,9 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 			parent.postMessage({ type, id, ok: false, error: (error as Error).message }, e.origin);
 		}
 	});
-	// 通知只说明状态、不含页面数据，可以发给任意父页面（工作台来源有两个写法，逐个指定会在控制台报错）。
+	// 通知只说明预览地址与状态，可以发给任意父页面（工作台来源有两个写法，逐个指定会在控制台报错）。
 	if (parent !== window) {
-		parent.postMessage({ type, event: "ready" }, "*");
+		parent.postMessage({ type, event: "ready", href: currentRoute }, "*");
 		addEventListener("pagehide", () => parent.postMessage({ type, event: "leaving" }, "*"));
 	}
 }
