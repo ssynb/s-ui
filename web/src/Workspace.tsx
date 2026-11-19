@@ -19,7 +19,9 @@ type Props = { onOpenFolder: () => void; t: T; locale: Locale; workspace: Return
 export function Workspace({ t, locale, workspace, onOpenFolder }: Props) {
 	const { state } = workspace;
 	const [activeWindow, setActiveWindow] = useState(CHAT_WINDOW);
-	const [selection, setSelection] = useState<Annotation>();
+	const [annotationRequest, setAnnotationRequest] = useState("");
+	const [capturing, setCapturing] = useState(false);
+	const [selection, setSelection] = useState<Annotation[]>([]);
 	const [choosingPage, setChoosingPage] = useState(false);
 	const multiplePages = (state.preview?.pages?.length ?? 0) > 1;
 	const showPages = multiplePages && (choosingPage || !state.preview?.selectedPage);
@@ -29,15 +31,17 @@ export function Workspace({ t, locale, workspace, onOpenFolder }: Props) {
 
 	// 对话框、画圈弹框和各工具窗面板交给 AI 的唯一入口。
 	const submitToAi = ({ text, images, withSelection }: AiSubmission) => {
-		const annotation = withSelection ? selection : undefined;
-		workspace.prompt(text, { annotation, images });
-		if (annotation) setSelection(undefined);
+		const annotations = withSelection !== false && selection.length ? selection : undefined;
+		const request = annotations && annotationRequest.trim() && annotationRequest.trim() !== text
+			? `${annotationRequest.trim()}\n${text}` : text;
+		workspace.prompt(request, { annotations, images });
+		if (annotations) { setSelection([]); setAnnotationRequest(""); }
 	};
 
 	const panelProps: PanelProps = {
 		locale,
 		project: { dir: state.dir!, name: projectName(state.dir!), previewUrl },
-		selection: selection && { elements: selection.capture.elements.map(({ selector, text, html }) => ({ selector, text, html })) },
+		selection: selection.length ? { elements: [...new Map(selection.flatMap(a => a.capture.elements).map(({ selector, text, html }) => [selector, { selector, text, html }])).values()] } : undefined,
 		busy: state.busy,
 		submitToAi,
 		showChat: () => setActiveWindow(CHAT_WINDOW),
@@ -47,33 +51,35 @@ export function Workspace({ t, locale, workspace, onOpenFolder }: Props) {
 
 	return (
 		<main className="grid min-h-0 flex-1 grid-cols-[minmax(360px,30%)_minmax(0,1fr)]">
-			<ToolWindows
-				t={t}
-				locale={locale}
-				active={activeWindow}
-				onActivate={setActiveWindow}
-				panelProps={panelProps}
-				chatActions={
-					<ConversationActions
-						t={t}
-						locale={locale}
-						current={state.conversationId}
-						conversations={state.conversations}
-						onNew={workspace.newConversation}
-						onSwitch={workspace.switchConversation}
-					/>
-				}
-				chat={
-					<Chat
-						t={t}
-						items={state.items}
-						busy={state.busy}
-						locked={state.exclusive && t.exclusive[state.exclusive]}
-						onSend={(text) => submitToAi({ text })}
-						onStop={workspace.abort}
-					/>
-				}
-			/>
+			<div inert={capturing} className="grid min-h-0 min-w-0">
+				<ToolWindows
+					t={t}
+					locale={locale}
+					active={activeWindow}
+					onActivate={setActiveWindow}
+					panelProps={panelProps}
+					chatActions={
+						<ConversationActions
+							t={t}
+							locale={locale}
+							current={state.conversationId}
+							conversations={state.conversations}
+							onNew={workspace.newConversation}
+							onSwitch={workspace.switchConversation}
+						/>
+					}
+					chat={
+						<Chat
+							t={t}
+							items={state.items}
+							busy={state.busy}
+							locked={state.exclusive && t.exclusive[state.exclusive]}
+							onSend={(text) => submitToAi({ text, withSelection: true })}
+							onStop={workspace.abort}
+						/>
+					}
+				/>
+			</div>
 			{showPages ? (
 				<ProjectPages
 					t={t}
@@ -83,7 +89,7 @@ export function Workspace({ t, locale, workspace, onOpenFolder }: Props) {
 					capture={workspace.capturePage}
 					select={async (path) => {
 						await workspace.selectPage(path);
-						setSelection(undefined);
+						setSelection([]);
 						setChoosingPage(false);
 					}}
 				/>
@@ -91,9 +97,12 @@ export function Workspace({ t, locale, workspace, onOpenFolder }: Props) {
 				<Preview
 					t={t}
 					preview={state.preview}
-					onChoosePage={multiplePages ? () => { setSelection(undefined); setChoosingPage(true); } : undefined}
+					onChoosePage={multiplePages ? () => { setSelection([]); setAnnotationRequest(""); setChoosingPage(true); } : undefined}
 					selection={selection}
+					request={annotationRequest}
+					onRequestChange={setAnnotationRequest}
 					onSelectionChange={setSelection}
+					onCapturing={setCapturing}
 					onSubmitSelection={(text) => submitToAi({ text, withSelection: true })}
 					missing={
 						<div className="flex h-full flex-col items-center justify-center gap-3">

@@ -6,7 +6,7 @@ type Point = [x: number, y: number];
 export type FoundElement = { selector: string; html: string; text: string; id: string; classes: string[]; ownText: string };
 
 /** 画圈那一刻的页面现场：地址、窗口滚动、DOM 快照（含表单值、容器滚动、弹窗状态）和圈内元素。 */
-export type PageCapture = { href: string; scrollX: number; scrollY: number; html: string; elements: FoundElement[] };
+export type PageCapture = { documentId?: string; view?: string; href: string; scrollX: number; scrollY: number; html: string; elements: FoundElement[] };
 
 /** 快照里的状态标记，渲染端据此还原。 */
 export const SNAPSHOT_ATTRS = { scroll: "data-s-ui-scroll", modal: "data-s-ui-modal", popover: "data-s-ui-popover" } as const;
