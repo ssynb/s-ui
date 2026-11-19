@@ -8,6 +8,7 @@ const DEV_STATE: Record<Preview["state"], { color: string; text: (t: T) => strin
 	starting: { color: "bg-warning", text: (t) => t.devStarting },
 	error: { color: "bg-danger", text: (t) => t.devError },
 	stopped: { color: "bg-danger", text: (t) => t.devStopped },
+	missing: { color: "bg-warning", text: (t) => t.devError },
 	empty: { color: "bg-faint", text: (t) => t.devEmpty },
 };
 

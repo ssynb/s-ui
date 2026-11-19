@@ -5,20 +5,25 @@ import { ConversationActions } from "./ConversationActions.tsx";
 import type { Locale, T } from "./i18n.ts";
 import type { AiSubmission, PanelProps } from "./panels.ts";
 import { projectName } from "./paths.ts";
+import { ProjectPages } from "./ProjectPages.tsx";
+import { Button } from "./ui.tsx";
 import { Preview } from "./Preview.tsx";
 import { StartFromReference } from "./references/StartFromReference.tsx";
 import { CHAT_WINDOW, ToolWindows } from "./ToolWindows.tsx";
 import { usePreviewControl } from "./usePreviewControl.ts";
 import type { useWorkspace } from "./useWorkspace.ts";
 
-type Props = { t: T; locale: Locale; workspace: ReturnType<typeof useWorkspace> };
+type Props = { onOpenFolder: () => void; t: T; locale: Locale; workspace: ReturnType<typeof useWorkspace> };
 
 /** 打开项目后的工作区：左侧工具窗、右侧预览。圈选与当前工具窗属于这个项目，切换项目时随之重置。 */
-export function Workspace({ t, locale, workspace }: Props) {
+export function Workspace({ t, locale, workspace, onOpenFolder }: Props) {
 	const { state } = workspace;
 	const [activeWindow, setActiveWindow] = useState(CHAT_WINDOW);
 	const [selection, setSelection] = useState<Annotation>();
-	const previewUrl = state.preview?.state === "ready" ? state.preview.url : undefined;
+	const [choosingPage, setChoosingPage] = useState(false);
+	const multiplePages = (state.preview?.pages?.length ?? 0) > 1;
+	const showPages = multiplePages && (choosingPage || !state.preview?.selectedPage);
+	const previewUrl = !showPages && state.preview?.state === "ready" ? state.preview.url : undefined;
 	const frame = useRef<HTMLIFrameElement>(null);
 	const preview = usePreviewControl(frame, previewUrl);
 
@@ -69,15 +74,37 @@ export function Workspace({ t, locale, workspace }: Props) {
 					/>
 				}
 			/>
-			<Preview
-				t={t}
-				preview={state.preview}
-				selection={selection}
-				onSelectionChange={setSelection}
-				onSubmitSelection={(text) => submitToAi({ text, withSelection: true })}
-				empty={<StartFromReference panel={panelProps} defaultMessage={t.previewEmpty} />}
-				frame={frame}
-			/>
+			{showPages ? (
+				<ProjectPages
+					t={t}
+					locale={locale}
+					pages={state.preview!.pages!}
+					baseUrl={state.preview!.url!}
+					capture={workspace.capturePage}
+					select={async (path) => {
+						await workspace.selectPage(path);
+						setSelection(undefined);
+						setChoosingPage(false);
+					}}
+				/>
+			) : (
+				<Preview
+					t={t}
+					preview={state.preview}
+					onChoosePage={multiplePages ? () => { setSelection(undefined); setChoosingPage(true); } : undefined}
+					selection={selection}
+					onSelectionChange={setSelection}
+					onSubmitSelection={(text) => submitToAi({ text, withSelection: true })}
+					missing={
+						<div className="flex h-full flex-col items-center justify-center gap-3">
+							<p className="text-muted">{t.previewMissing}</p>
+							<Button onClick={onOpenFolder}>{t.openFolder}</Button>
+						</div>
+					}
+					empty={<StartFromReference panel={panelProps} defaultMessage={t.previewEmpty} />}
+					frame={frame}
+				/>
+			)}
 		</main>
 	);
 }

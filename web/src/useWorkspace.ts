@@ -23,6 +23,7 @@ export type Preview = Extract<SessionEvent, { type: "preview" }>;
 export type RequestError = { code?: string; message: string };
 
 type State = {
+	projectChoices?: string[];
 	connected: boolean;
 	models: ModelInfo[];
 	model?: string;
@@ -42,7 +43,7 @@ type State = {
 	items: ChatItem[];
 };
 
-type Action = ServerMessage | { type: "connection"; connected: boolean } | { type: "selectModel"; model: string };
+type Action = ServerMessage | { type: "dismissProjects" } | { type: "connection"; connected: boolean } | { type: "selectModel"; model: string };
 
 const initial: State = { connected: false, models: [], places: [], recentProjects: [], conversations: [], busy: false, items: [] };
 
@@ -103,9 +104,13 @@ function reducer(state: State, action: Action): State {
 			};
 		case "recentProjects":
 			return { ...state, recentProjects: action.projects };
+		case "dismissProjects":
+			return { ...state, projectChoices: undefined };
+		case "projectChoices":
+			return { ...state, projectChoices: action.directories };
 		case "opened":
 			// 随后的订阅重放会带来当前对话、对话列表、模型和预览状态。
-			return { ...state, sessionId: action.sessionId, dir: action.dir, sessionModel: action.model, exclusive: undefined, preview: undefined, busy: false, items: [] };
+			return { ...state, projectChoices: undefined, sessionId: action.sessionId, dir: action.dir, sessionModel: action.model, exclusive: undefined, preview: undefined, busy: false, items: [] };
 		case "event":
 			return action.sessionId === state.sessionId ? applySessionEvent(state, action.event) : state;
 		case "folder":
@@ -203,5 +208,11 @@ export function useWorkspace() {
 		[request, sessionId],
 	);
 
-	return { state, chooseModel, open, createProject, listFolder, prompt, abort, newConversation, switchConversation, callModule };
+	const selectPage = useCallback((path: string) => request({ type: "selectPage", sessionId: sessionId!, path }), [request, sessionId]);
+	const capturePage = useCallback(async (path: string) => {
+		const msg = await request({ type: "capturePage", sessionId: sessionId!, path });
+		return (msg as Extract<ServerMessage, { type: "moduleResult" }>).result as import("../../server/protocol.ts").ProjectPageShot;
+	}, [request, sessionId]);
+	const dismissProjects = () => dispatch({ type: "dismissProjects" });
+	return { state, selectPage, capturePage, dismissProjects, chooseModel, open, createProject, listFolder, prompt, abort, newConversation, switchConversation, callModule };
 }

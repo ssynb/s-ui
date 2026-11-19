@@ -3,8 +3,9 @@
 Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建步骤）+ React 19 / Vite / Tailwind v4 前端。前端只通过一条 WebSocket（`/ws`）与后台交互，协议类型在 `server/protocol.ts`，前后端共用。
 
 - `server/main.ts`：入口。HTTP 服务（Vite 中间件模式托管 `web/`）、WebSocket（只接受工作台自身来源）、按文件夹管理项目会话、自动打开浏览器、退出时清理。
-- `server/project-session.ts`：项目会话深模块。拥有该项目的对话（pi 持久化会话，可新建、切换、换模型）和 dev server 的生命周期；对外只有 `open / prompt / setModel / newConversation / switchConversation / subscribe / abort / dispose`，输出 `SessionEvent` 事件流，订阅时先重放当前对话。
+- `server/project-session.ts`：项目会话深模块。拥有该项目的对话（pi 持久化会话，可新建、切换、换模型）和 dev server 的生命周期；对外只有 `open / prompt / setModel / newConversation / switchConversation / selectPage / capturePage / subscribe / abort / dispose`，输出 `SessionEvent` 事件流，订阅时先重放当前对话。
 - `server/conversations.ts`：对话的存储与还原：每个项目一个目录（`~/.s-ui/sessions/<名>-<哈希>/`，pi 的 JSONL 会话），创建 pi 会话（不加载用户 `~/.pi/agent` 下的扩展、技能和系统提示，只复用其凭据）、列出最近对话、从会话记录重建界面对话（用户原话另记为自定义条目）。
+- 项目与选页发现：`server/project-discovery.ts`；`main.ts` 在创建会话前发现直接子项目，多个通过 `projectChoices` 回给界面，选中后才启动。`ProjectSession` 保存已发现的页面和选择，校验 `selectPage / capturePage` 的路径属于当前预览；`server/project-page-shot.ts` 只截该预览的真实成功 HTML 响应，不接受外部 URL、不跟随跳转。验收：`test/project-pages.test.ts`。
 - `server/dev-server.ts`：安装依赖、启动 `dev` 脚本、从输出识别本地地址、按进程组停止。
 - `server/preview-proxy.ts`：每个预览的本地反向代理（含 HMR WebSocket），向 HTML 注入桥接脚本，只应工作台页面的请求：在预览里采集圈注现场，执行预览操作。
 - `server/preview-ops.ts`：桥接脚本里的预览操作（自包含，注入页面）：临时样式层（放在文档最末并在有新节点追加到其后时移回最末，记在预览页面的 sessionStorage，刷新、热更新后自己恢复）、网页字体、识别组件、读设计变量；消息形状 `PreviewOp` / `PreviewOpReply` / `PreviewAnnouncement`（ready、leaving）。
@@ -22,6 +23,7 @@ Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建
 - `web/src/styles.css`：设计 token（参照 JetBrains 新 UI，浅色/深色跟随系统）；`web/src/ui.tsx`：共享控件（按钮、菜单、模态框、项目图标），密度统一为 compact。
 - `web/src/panels.ts`：工具窗面板契约（冻结）——`PanelDefinition`、`PanelProps`（语言、项目信息、圈选上下文、`submitToAi` 统一交给 AI、`showChat`、`callModule` 调后台模块、`preview` 操作预览页面：临时样式层、字体、识别组件、读设计变量），以及跨面板嵌入部件的 props（`SimilarProductsProps`、`StartFromReferenceProps`）。
 - `web/src/usePreviewControl.ts`：`PanelProps.preview` 的实现：经 `PREVIEW_OP_MESSAGE` 与预览桥接脚本通信；`ready` 跟随桥接脚本的 ready/leaving 通知；工作区刚打开时先清掉上次留下的样式层。预览 iframe 的 ref 由 `Workspace` 持有，`Preview` 与它共用。
+- 选页界面：`web/src/ProjectPages.tsx` 复用参考页面的卡片与 `ScreenshotView.tsx` 整页视图，截图失败也可选；`Workspace.tsx` 把所选路由交给原预览 iframe，圈选与打磨不走截图数据。空文件夹与有内容但无启动入口分别是 `empty`、`missing` 预览状态。
 - `web/src/ToolWindows.tsx`：JetBrains 式左侧工具窗条与工具窗注册表（对话为内置默认）；`web/src/Workspace.tsx`：打开项目后的工作区，持有圈选与当前工具窗，组装 `PanelProps`。
 - `web/src/polish/`、`web/src/references/`：「打磨」「参考页面」工具窗，各含 `index.ts`（PanelDefinition）、面板组件、`strings.ts`。参考页面另导出两个部件：`SimilarProducts.tsx`（同类产品参考，可嵌入打磨，`compact` 为两列小卡片）、`StartFromReference.tsx`（空项目时预览区内容，由 `Workspace` 经 `Preview` 的 `empty` 渲染：按描述找同类或选精选，“照这个做”让 AI 照参考搭页面并按 `server/design-tokens.ts` 生成变量文件）。找同类状态按项目共享在 `web/src/references/similarSearch.ts`，三处共用、不重复查找。
 - `web/src/polish/` 打磨：`PolishPanel.tsx` 组装（分区导航、整理引导与进度、底部保存条），`TokenSections.tsx`（字体、配色、形状与密度）与 `PageSections.tsx`（页面里的组件、动效）是各分区；`state.ts` 是未保存改动（`PolishDraft`，按项目记在模块里）及由它推出的设计变量、临时样式层和保存后剩余改动；`hooks.ts` 让预览样式层跟上改动、读状态与整理、识别组件；`draft.ts` 算保存请求（只带改过的变量）；素材在 `fonts.ts`、`palettes.ts`、`shape.ts`、`components.ts`（每类组件的替换做法，样式只作用于 `:is(groupSelector)`）、`motion.ts`（可在页面组件上试的动效）；`color.ts` 是对比度与“换色后仍用原主色的组件”检测；`prompt.ts` 生成交给 AI 的结构化需求；`params.ts`、`types.ts` 是动效参数定义。测试：`test/polish*.test.ts`。

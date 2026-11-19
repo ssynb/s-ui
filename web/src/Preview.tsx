@@ -37,6 +37,7 @@ function PreviewStatus({ t, preview }: { t: T; preview: PreviewState }) {
 	const busy = preview.state === "installing" || preview.state === "starting";
 	const text = {
 		empty: t.previewEmpty,
+		missing: t.previewMissing,
 		installing: t.previewInstalling,
 		starting: t.previewStarting,
 		error: t.previewError,
@@ -157,6 +158,7 @@ function AnnotationLayer({ t, shown, ready, onStroke, onSubmit, onExit }: LayerP
 type PreviewProps = {
 	t: T;
 	preview?: PreviewState;
+	onChoosePage?: () => void;
 	/** 当前圈选（含画圈那一刻的页面现场），由上层持有，工具窗面板也能用。 */
 	selection?: Annotation;
 	onSelectionChange: (selection?: Annotation) => void;
@@ -164,11 +166,12 @@ type PreviewProps = {
 	onSubmitSelection: (text: string) => void;
 	/** 项目还没有页面（预览状态 empty）时预览区显示的内容。 */
 	empty: ReactNode;
+	missing: ReactNode;
 	/** 预览 iframe；由上层持有，预览操作（PanelProps.preview）也经它通信。 */
 	frame: RefObject<HTMLIFrameElement | null>;
 };
 
-export function Preview({ t, preview, selection, onSelectionChange, onSubmitSelection, empty, frame }: PreviewProps) {
+export function Preview({ t, preview, onChoosePage, selection, onSelectionChange, onSubmitSelection, empty, missing, frame }: PreviewProps) {
 	const [annotating, setAnnotating] = useState(false);
 	const [capturing, setCapturing] = useState<Stroke>();
 	const [error, setError] = useState("");
@@ -198,7 +201,7 @@ export function Preview({ t, preview, selection, onSelectionChange, onSubmitSele
 		onSelectionChange(undefined);
 	};
 	return (
-		<section aria-label={t.previewTab} className="flex min-h-0 flex-col bg-panel">
+		<section aria-label={t.previewTab} className="flex min-h-0 flex-1 flex-col bg-panel">
 			<div role="tablist" className="flex h-9 shrink-0 items-end border-b border-line bg-app px-1">
 				<div role="tab" aria-selected className="flex h-full items-center gap-1.5 border-b-2 border-accent px-3">
 					<span aria-hidden className={`size-1.5 rounded-full ${url ? "bg-success" : "bg-faint"}`} />
@@ -212,6 +215,7 @@ export function Preview({ t, preview, selection, onSelectionChange, onSubmitSele
 				<div className="flex h-7 min-w-0 flex-1 items-center rounded-md bg-app px-2 font-mono text-xs text-muted">
 					<span className="truncate">{url ?? ""}</span>
 				</div>
+				{onChoosePage && <Button onClick={onChoosePage}>{t.changePage}</Button>}
 				<Button
 					variant={annotating ? "primary" : "default"}
 					aria-pressed={annotating}
@@ -236,7 +240,7 @@ export function Preview({ t, preview, selection, onSelectionChange, onSubmitSele
 					<iframe key={reloads} ref={frame} title={t.previewTab} src={url} className="absolute inset-0 h-full w-full border-0 bg-white" />
 				) : (
 					preview &&
-					(preview.state === "empty" ? (
+					(preview.state === "missing" ? missing : preview.state === "empty" ? (
 						<div className="h-full overflow-auto">{empty}</div>
 					) : (
 						<PreviewStatus t={t} preview={preview} />

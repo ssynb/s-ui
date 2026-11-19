@@ -1,12 +1,12 @@
 import type { ReactNode } from "react";
 import type { Locale } from "../i18n.ts";
+import { jpegSrc } from "../ScreenshotView.tsx";
 import { Spinner } from "../ui.tsx";
 import { STRINGS } from "./strings.ts";
 
 /** 网格里的一张参考卡片。image 与 failed 都为空表示还在截图。 */
 export type RefCard = { name: string; url: string; why: string; image?: string; failed?: string };
 
-export const jpegSrc = (base64: string) => `data:image/jpeg;base64,${base64}`;
 export const hostOf = (url: string) => new URL(url).host.replace(/^www\./, "");
 
 /** compact：窄栏里固定两列。 */
@@ -14,18 +14,18 @@ export function CardGrid({ children, compact }: { children: ReactNode; compact?:
 	return <ul className={compact ? "grid grid-cols-2 gap-2" : "grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-3"}>{children}</ul>;
 }
 
-type CardProps = { locale: Locale; card: RefCard; onOpen: (card: RefCard) => void; compact?: boolean };
+type CardProps = { locale: Locale; card: RefCard; onOpen: (card: RefCard) => void; compact?: boolean; openLabel?: string; allowUnavailable?: boolean };
 
 /** compact 只显示截图和名字，网址与理由在大图里看。 */
-export function ReferenceCard({ locale, card, onOpen, compact }: CardProps) {
+export function ReferenceCard({ locale, card, onOpen, compact, allowUnavailable, openLabel }: CardProps) {
 	const s = STRINGS[locale];
 	const ready = Boolean(card.image);
 	return (
 		<li className="min-w-0">
 			<button
 				type="button"
-				disabled={!ready}
-				aria-label={s.openFull(card.name)}
+				disabled={!ready && !allowUnavailable}
+				aria-label={openLabel ?? s.openFull(card.name)}
 				onClick={() => onOpen(card)}
 				className="group block w-full overflow-hidden rounded-md text-left ring-1 ring-line hover:ring-accent disabled:cursor-default disabled:hover:ring-line"
 			>

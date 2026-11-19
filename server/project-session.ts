@@ -1,4 +1,4 @@
-import { mkdir } from "node:fs/promises";
+import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type AgentSession, type AgentSessionEvent, type ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
 import { type CircledElement, renderAnnotation } from "./annotate.ts";
@@ -11,6 +11,8 @@ import {
 	toolSummary,
 	transcriptOf,
 } from "./conversations.ts";
+import { discoverPages } from "./project-discovery.ts";
+import { captureProjectPage } from "./project-page-shot.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
 import { assertUsable, isUsable, type Model, modelKey } from "./models.ts";
 import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
@@ -106,6 +108,20 @@ export class ProjectSession {
 	/** 预览页面地址（经预览代理）；页面没跑起来时为空。 */
 	get previewUrl() {
 		return this.#preview.state === "ready" ? this.#preview.url : undefined;
+	}
+
+	#pageUrl(path: string) {
+		if (!this.#proxy || this.#preview.state !== "ready" || !this.#preview.pages?.includes(path)) throw new Error("Unknown preview page");
+		return new URL(path, this.#proxy.url).href;
+	}
+
+	selectPage(path: string) {
+		const url = this.#pageUrl(path);
+		this.#emit({ ...this.#preview, url, selectedPage: path });
+	}
+
+	capturePage(path: string) {
+		return captureProjectPage(this.#pageUrl(path));
 	}
 
 	/** 订阅事件；订阅时先重放当前对话、对话列表、模型、预览和运行状态。 */
@@ -345,8 +361,11 @@ export class ProjectSession {
 	}
 
 	async #startPreview() {
-		if (!(await hasDevScript(this.dir))) return this.#emit({ type: "preview", state: "empty" });
 		try {
+			if (!(await hasDevScript(this.dir))) {
+				const entries = await readdir(this.dir);
+				return this.#emit({ type: "preview", state: entries.length ? "missing" : "empty" });
+			}
 			if (this.#dev.needsInstall()) {
 				this.#emit({ type: "preview", state: "installing" });
 				await this.#dev.install();
@@ -355,7 +374,9 @@ export class ProjectSession {
 			this.#emit({ type: "preview", state: "starting" });
 			const devUrl = await this.#dev.start((log) => void this.#onDevExit(log));
 			this.#proxy = await startPreviewProxy(devUrl, this.#appOrigins);
-			this.#emit({ type: "preview", state: "ready", url: this.#proxy.url });
+			const pages = await discoverPages(this.dir);
+			const selectedPage = pages.length === 1 ? pages[0] : undefined;
+			this.#emit({ type: "preview", state: "ready", url: selectedPage ? new URL(selectedPage, this.#proxy.url).href : this.#proxy.url, pages, selectedPage });
 		} catch (error) {
 			this.#emit({ type: "preview", state: "error", message: (error as Error).message });
 		}

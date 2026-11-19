@@ -5,7 +5,7 @@ import { errorText, useI18n } from "./i18n.ts";
 import { NewProjectDialog } from "./NewProjectDialog.tsx";
 import { StatusBar } from "./StatusBar.tsx";
 import { Toolbar } from "./Toolbar.tsx";
-import { IconButton } from "./ui.tsx";
+import { Button, Modal, IconButton } from "./ui.tsx";
 import { type RequestError, useWorkspace } from "./useWorkspace.ts";
 import { Welcome } from "./Welcome.tsx";
 import { Workspace } from "./Workspace.tsx";
@@ -55,7 +55,7 @@ export function App() {
 				</p>
 			)}
 			{state.sessionId ? (
-				<Workspace key={state.sessionId} t={t} locale={locale} workspace={workspace} />
+				<Workspace key={state.sessionId} t={t} locale={locale} workspace={workspace} onOpenFolder={openFolder} />
 			) : (
 				<Welcome
 					t={t}
@@ -69,6 +69,14 @@ export function App() {
 			)}
 			<StatusBar t={t} hasProject={Boolean(state.sessionId)} preview={state.preview} model={state.sessionModel} busy={state.busy} connected={state.connected} />
 
+			{state.projectChoices && (
+				<Modal title={t.chooseProject} onClose={workspace.dismissProjects} className="w-[min(480px,90vw)]">
+					<div className="flex flex-col gap-2 p-4">
+						{state.projectChoices.map((dir) => <Button key={dir} onClick={() => openProject(dir)}>{dir.split(/[\\/]/).at(-1)}</Button>)}
+						<Button onClick={workspace.dismissProjects}>{t.cancel}</Button>
+					</div>
+				</Modal>
+			)}
 			{dialog?.kind === "open" && (
 				<FolderPicker
 					t={t}

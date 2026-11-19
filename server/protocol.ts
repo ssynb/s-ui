@@ -20,7 +20,9 @@ export type ImageMimeType = (typeof IMAGE_MIME_TYPES)[number];
 /** 后台模块的接口描述：动作名 → { payload, result }。各模块在 server/modules/<名>.ts 里声明自己的。 */
 export type ModuleApi = Record<string, { payload: unknown; result: unknown }>;
 
-export type PreviewState = "empty" | "installing" | "starting" | "ready" | "error" | "stopped";
+export type ProjectPageShot = { image: string; error?: never } | { error: string; image?: never };
+
+export type PreviewState = "empty" | "missing" | "installing" | "starting" | "ready" | "error" | "stopped";
 
 /** 独占项目文件的任务：执行期间对话消息被拒绝。 */
 export type ExclusiveTask = "organizing" | "savingTokens";
@@ -37,7 +39,7 @@ export type SessionEvent =
 	| { type: "model"; model: string }
 	/** 独占任务开始（task）或结束（无 task）；订阅时有进行中的任务也会重放。 */
 	| { type: "exclusive"; task?: ExclusiveTask }
-	| { type: "preview"; state: PreviewState; url?: string; message?: string }
+	| { type: "preview"; state: PreviewState; url?: string; message?: string; pages?: string[]; selectedPage?: string }
 	| { type: "user"; text: string; images: string[] }
 	| { type: "assistant_delta"; text: string }
 	| { type: "assistant_end" }
@@ -56,6 +58,7 @@ export type Place = { key: "home" | "desktop" | "documents" | "drive"; path: str
 
 // 带 requestId 的命令，结果（opened / folder / moduleResult）或失败（error）回带同一个 requestId。
 export type ClientMessage =
+	| { type: "selectPage" | "capturePage"; requestId: string; sessionId: string; path: string }
 	| { type: "open"; requestId: string; dir: string; model: string }
 	| { type: "createProject"; requestId: string; parent: string; name: string; model: string }
 	| { type: "listFolder"; requestId: string; path: string }
@@ -68,6 +71,7 @@ export type ClientMessage =
 
 export type ServerMessage =
 	| { type: "hello"; models: ModelInfo[]; defaultModel?: string; exampleDir: string; home: string; places: Place[]; recentProjects: string[] }
+	| { type: "projectChoices"; requestId: string; directories: string[] }
 	| { type: "opened"; requestId?: string; sessionId: string; dir: string; model: string }
 	| { type: "recentProjects"; projects: string[] }
 	| { type: "folder"; requestId: string; listing: FolderListing }
