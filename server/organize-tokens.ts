@@ -16,10 +16,13 @@ const READ_ONLY_TOOLS = ["read", "grep", "find", "ls"];
 const ORGANIZE_PROMPT = `Organize this project's styling into design tokens WITHOUT changing how any page looks.
 
 1. Create ${TOKENS_FILE} that defines ALL of these CSS custom properties on :root, with values taken from what the project uses today:
-${DESIGN_TOKENS.map((t) => `   - ${t.name}: ${t.meaning}`).join("\n")}
+${DESIGN_TOKENS.filter((t) => t.name !== "--sui-font-ui")
+	.map((t) => `   - ${t.name}: ${t.meaning}`)
+	.join("\n")}
    When the project has no value for a token, pick one consistent with the current design (for example derived from existing colors).
 2. Make sure ${TOKENS_FILE} is loaded before the project's other styles (import it from the main stylesheet or the entry script).
 3. Replace hardcoded values in the project's styles with var(--sui-...) wherever they mean the same thing: font families, the colors above, border radii, box shadows; spacing only where it is an exact multiple of --sui-space (use calc(var(--sui-space) * n)). Computed values must stay identical.
+Do not add --sui-font-ui or new control font rules: independent control fonts are opt-in after organizing. Preserve existing control font styles and use --sui-font-sans only where its value already matches.
 4. If the project loads web fonts, keep them loading; put font stylesheet imports as @import url("...") lines at the top of ${TOKENS_FILE}.
 Do not change markup, content or behaviour. You can read and edit files; you cannot run commands.
 Edit carefully: in minified CSS keep every brace and semicolon balanced; after editing, re-read each changed file to check it is still valid.

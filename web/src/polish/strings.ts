@@ -1,15 +1,17 @@
 import type { Locale } from "../i18n.ts";
 
-// 「打磨」工具窗的界面文案。两种语言同时补齐，类型会检查缺漏。素材自己的名称和描述写在素材里（fonts、palettes、components、motion）。
+// 「打磨」工具窗的界面文案。两种语言同时补齐，类型会检查缺漏。素材自己的名称和描述写在素材里（fonts、components、motion）。
 const en = {
 	title: "Polish",
 	sections: "Sections",
 	fonts: "Fonts",
-	colors: "Colors",
-	shape: "Shape & density",
-	components: "Components on this page",
+	style: "Style",
+	fontRole: "Text role",
+	fontRoles: { heading: "Headings", body: "Body", ui: "Controls" },
+	followBody: "Follow body font",
+	noFontSample: "No text found on this page yet",
+	components: "Components",
 	motion: "Motion",
-	references: "Similar products",
 
 	previewNotRunning: "The page isn't running yet. Once it shows up in the preview, you can try changes on it here. No page yet? Ask the AI in the chat to build one.",
 	previewConnecting: "Connecting to the page in the preview…",
@@ -19,7 +21,8 @@ const en = {
 	statusFailed: (msg: string) => `Couldn't read the design settings: ${msg}`,
 	retry: "Try again",
 	organizeTitle: "Organize the design settings once",
-	organizeBody: "The AI gathers the fonts, colors, corners and shadows scattered across the code into one set of settings. The page looks exactly the same afterwards; then fonts, colors and shape can be changed here with one click.",
+	organizeBody:
+		"The AI gathers the fonts, colors, corners and shadows scattered across the code into one set of settings. The page looks exactly the same afterwards; then fonts can be changed here independently.",
 	organize: "Organize",
 	organizing: "Organizing…",
 	organizePhase: { analyzing: "Reading the styles", verifying: "Checking that the page looks the same", tool: "", text: "" } as Record<string, string>,
@@ -37,16 +40,6 @@ const en = {
 
 	original: "As is",
 	current: "Current",
-	fontSampleHeading: "Aa 永",
-	fontSample: "设计让产品更好用 The quick brown fox",
-	primaryColor: "Primary color",
-	textOnPrimary: (color: string, ratio: string) => `Text on it: ${color === "#ffffff" ? "white" : "black"} · ${ratio}:1`,
-	leftovers: (list: string) => `Some elements kept the old primary color, probably hard-coded rather than using the design settings: ${list}`,
-	fixLeftovers: "Have the AI switch the remaining colors to the design settings",
-	radius: "Corners",
-	space: "Spacing",
-	shadow: "Shadows",
-	shadowLevels: ["None", "Faint", "Soft", "Clear", "Strong"],
 	reset: "Reset",
 
 	inspecting: "Finding components on the page…",
@@ -74,11 +67,13 @@ const zh: typeof en = {
 	title: "打磨",
 	sections: "分区",
 	fonts: "字体",
-	colors: "配色",
-	shape: "形状与密度",
-	components: "页面里的组件",
+	style: "风格",
+	fontRole: "文字用途",
+	fontRoles: { heading: "标题", body: "正文", ui: "界面控件" },
+	followBody: "沿用正文",
+	noFontSample: "还没有读到当前页面的文字",
+	components: "组件",
 	motion: "动效",
-	references: "同类参考",
 
 	previewNotRunning: "页面还没跑起来。等右边预览显示出页面，就能在这里点一下立刻试效果。还没有页面？先在对话里让 AI 做一个。",
 	previewConnecting: "正在连接预览里的页面…",
@@ -88,7 +83,7 @@ const zh: typeof en = {
 	statusFailed: (msg: string) => `没能读取设计设置：${msg}`,
 	retry: "重试",
 	organizeTitle: "先整理一次设计设置",
-	organizeBody: "AI 会把代码里散落的字体、颜色、圆角、阴影收拢成一套设置，页面外观不变。整理后字体、配色、形状都能在这里一键更换。",
+	organizeBody: "AI 会把代码里散落的字体、颜色、圆角、阴影收拢成一套设置，页面外观不变。整理后可分别更换标题、正文和控件字体。",
 	organize: "整理",
 	organizing: "正在整理…",
 	organizePhase: { analyzing: "正在阅读样式", verifying: "正在核对页面外观是否不变", tool: "", text: "" },
@@ -106,16 +101,6 @@ const zh: typeof en = {
 
 	original: "原样",
 	current: "当前",
-	fontSampleHeading: "永 Aa",
-	fontSample: "设计让产品更好用 The quick brown fox",
-	primaryColor: "主色",
-	textOnPrimary: (color: string, ratio: string) => `上面的文字：${color === "#ffffff" ? "白色" : "黑色"} · 对比度 ${ratio}:1`,
-	leftovers: (list: string) => `换色后这些元素还是原来的主色，多半是代码里写死的颜色、没用设计设置：${list}`,
-	fixLeftovers: "让 AI 把剩下的颜色也改用设计设置",
-	radius: "圆角",
-	space: "间距",
-	shadow: "阴影",
-	shadowLevels: ["无", "极淡", "柔和", "清晰", "浓重"],
 	reset: "还原",
 
 	inspecting: "正在识别页面里的组件…",

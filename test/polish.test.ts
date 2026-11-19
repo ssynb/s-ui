@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import type { FoundComponent, PolishStatus } from "../web/src/panels.ts";
-import { contrastRatio, readableOn } from "../web/src/polish/color.ts";
 import { COMPONENT_VARIANTS, componentLayer } from "../web/src/polish/components.ts";
 import { MOTION_EFFECTS, motionLayer } from "../web/src/polish/motion.ts";
 import { componentRequest } from "../web/src/polish/prompt.ts";
@@ -21,21 +20,10 @@ test("saving sends only the design variables that differ from the file, and font
 
 	const fontImports = ["https://fonts.googleapis.com/css2?family=Lora&display=swap"];
 	const withFont = savePayload({ tokens: { "--sui-font-sans": "'Lora', serif" }, fontImports }, status);
-	assert.deepEqual(withFont, { values: { "--sui-font-sans": "'Lora', serif" }, fontImports });
+	assert.deepEqual(withFont, { values: { "--sui-font-sans": "'Lora', serif" }, fontImports: [...status.fontImports, ...fontImports] });
 
 	const sameFont = savePayload({ tokens: {}, fontImports: [...status.fontImports] }, status);
 	assert.deepEqual(sameFont, { values: {} });
-});
-
-test("text on the primary color stays readable (WCAG AA 4.5:1) for any primary", () => {
-	assert.equal(Math.round(contrastRatio("#000000", "#ffffff")), 21);
-	assert.equal(readableOn("#1e3a8a"), "#ffffff");
-	assert.equal(readableOn("#ffd400"), "#000000");
-	for (let hue = 0; hue < 360; hue += 15)
-		for (const light of [25, 45, 55, 65, 85]) {
-			const primary = hslHex(hue, 80, light);
-			assert.ok(contrastRatio(primary, readableOn(primary)) >= 4.5, `${primary} → ${readableOn(primary)}`);
-		}
 });
 
 const found = (kind: FoundComponent["kind"], groupSelector: string): FoundComponent => ({
@@ -86,15 +74,3 @@ test("the request handed to the AI names the chosen variant, where it is on the 
 	assert.match(en, new RegExp(chosen!.name.en));
 	assert.doesNotMatch(en, /[\u4e00-\u9fff]/);
 });
-
-function hslHex(h: number, s: number, l: number) {
-	const a = (s / 100) * Math.min(l / 100, 1 - l / 100);
-	const f = (n: number) => {
-		const k = (n + h / 30) % 12;
-		const c = l / 100 - a * Math.max(-1, Math.min(k - 3, 9 - k, 1));
-		return Math.round(c * 255)
-			.toString(16)
-			.padStart(2, "0");
-	};
-	return `#${f(0)}${f(8)}${f(4)}`;
-}

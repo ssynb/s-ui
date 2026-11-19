@@ -6,13 +6,13 @@ import { organizeTokens } from "../organize-tokens.ts";
 import { readTokensStatus, saveTokens } from "../tokens-file.ts";
 
 export type PolishStatus = {
-	/** 项目里已有设计变量文件（TOKENS_FILE），且约定的变量都已定义。 */
+	/** 项目里已有设计变量文件（TOKENS_FILE），且必填变量都已定义（控件字体可选）。 */
 	organized: boolean;
 	/** 设计变量文件相对项目根的路径（即 TOKENS_FILE）。 */
 	file: string;
 	/** 文件里当前的变量值（源码里的值，不含预览里未保存的临时样式层）。 */
 	values: TokenValues;
-	/** 约定里有、文件里还没有定义的变量。 */
+	/** 文件里还没有定义的必填变量。 */
 	missing: TokenName[];
 	/** 文件顶部引入的网页字体样式表（@import url(...)）。 */
 	fontImports: string[];

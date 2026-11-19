@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DESIGN_TOKENS, type TokenName, TOKENS_FILE, type TokenValues } from "./design-tokens.ts";
+import { DESIGN_TOKENS, UI_FONT_RULE, type TokenName, TOKENS_FILE, type TokenValues } from "./design-tokens.ts";
 import type { PolishStatus } from "./modules/polish.ts";
 
 const TOKEN_NAMES = new Set<string>(DESIGN_TOKENS.map((t) => t.name));
@@ -51,7 +51,7 @@ export async function readTokensStatus(dir: string): Promise<PolishStatus> {
 	const path = join(dir, TOKENS_FILE);
 	const text = existsSync(path) ? await readFile(path, "utf8") : "";
 	const { values, fontImports } = parse(text);
-	const missing = DESIGN_TOKENS.map((t) => t.name).filter((name) => !(name in values)) as TokenName[];
+	const missing = DESIGN_TOKENS.map((t) => t.name).filter((name) => name !== "--sui-font-ui" && !(name in values)) as TokenName[];
 	return { organized: Boolean(text) && missing.length === 0, file: TOKENS_FILE, values, missing, fontImports };
 }
 
@@ -73,14 +73,16 @@ export async function saveTokens(dir: string, values: TokenValues, fontImports?:
 		if (!isSafeValue(value!)) throw new Error(`Invalid value for ${name}`);
 	}
 	for (const url of fontImports ?? []) {
-		if (!SAFE_IMPORT.test(url)) throw new Error(`Font imports must be https URLs: ${url}`);
+		if (!status.fontImports.includes(url) && !SAFE_IMPORT.test(url)) throw new Error(`Font imports must be https URLs: ${url}`);
 	}
 
 	const path = join(dir, TOKENS_FILE);
 	let text = await readFile(path, "utf8");
 	for (const [name, value] of Object.entries(values)) {
+		if (name === "--sui-font-ui" && !declaration(name).test(text)) text += `\n:root { --sui-font-ui: ${value!.trim()}; }\n`;
 		text = text.replace(declaration(name), (_m, head: string, _old: string, tail: string) => `${head}${value!.trim()}${tail}`);
 	}
+	if (values["--sui-font-ui"] && !text.includes(UI_FONT_RULE)) text += `\n${UI_FONT_RULE}\n`;
 	if (fontImports) text = replaceImports(text, fontImports);
 	await writeFile(path, text);
 	return readTokensStatus(dir);

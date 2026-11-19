@@ -10,7 +10,7 @@ const ORGANIZED = `@import url("https://fonts.googleapis.com/css2?family=Lora");
 
 /* brand tokens */
 :root {
-${DESIGN_TOKENS.map((t) => `  ${t.name}: ${t.name === "--sui-color-primary" ? "#3574f0" : t.name === "--sui-radius-md" ? "6px" : "initial"};`).join("\n")}
+${DESIGN_TOKENS.filter(t => t.name !== "--sui-font-ui").map((t) => `  ${t.name}: ${t.name === "--sui-color-primary" ? "#3574f0" : t.name === "--sui-radius-md" ? "6px" : "initial"};`).join("\n")}
 }
 
 .button { background: var(--sui-color-primary); }
@@ -33,14 +33,15 @@ test("a project without design tokens is reported as not organized, and saving t
 	const status = await call("status");
 	assert.equal(status.organized, false);
 	assert.equal(status.file, TOKENS_FILE);
-	assert.deepEqual(status.missing, DESIGN_TOKENS.map((t) => t.name));
+	assert.deepEqual(status.missing, DESIGN_TOKENS.filter(t => t.name !== "--sui-font-ui").map((t) => t.name));
 	await assert.rejects(call("saveTokens", { values: { "--sui-color-primary": "#ff0000" } }));
 });
 
 test("saving tokens rewrites only the given values and the font imports, leaving the rest of the file as it was", async () => {
 	const { dir, call } = await project(ORGANIZED);
 	const before = await call("status");
-	assert.equal(before.organized, true);
+	assert.equal(before.organized, true, "legacy projects need no reorganization");
+ assert.equal(before.values["--sui-font-ui"], undefined);
 	assert.equal(before.values["--sui-color-primary"], "#3574f0");
 	assert.deepEqual(before.fontImports, ["https://fonts.googleapis.com/css2?family=Lora"]);
 
