@@ -12,10 +12,11 @@ export type OpenCard = RefCard & { image: string };
 /** 大图里的主按钮：文案和交给 AI 的内容。默认是「参考这个」改当前页面（有圈选时只改圈选部分）。 */
 export type ViewerAction = { label: string; compose: (card: OpenCard, aspects: Aspect[]) => AiSubmission; onSubmitted?: () => void };
 
-type Props = PanelProps & { card: OpenCard; onClose: () => void; action?: ViewerAction };
+export type ReferenceChoice = { label: string; onChoose: (card: OpenCard) => void };
+type Props = PanelProps & { card: OpenCard; onClose: () => void; action?: ViewerAction; choice?: ReferenceChoice };
 
 /** 大图：先显示首屏，整页长截图拍好后换上，可滚动查看；右侧选参考哪些方面，交给 AI。 */
-export function ReferenceViewer({ card, onClose, action, locale, selection, callModule, submitToAi, showChat }: Props) {
+export function ReferenceViewer({ card, onClose, action, choice, locale, selection, callModule, submitToAi, showChat }: Props) {
 	const s = STRINGS[locale];
 	const [fullPage, setFullPage] = useState<string | "loading" | "failed">("loading");
 	const [aspects, setAspects] = useState<Set<Aspect>>(() => new Set(ASPECTS));
@@ -43,6 +44,11 @@ export function ReferenceViewer({ card, onClose, action, locale, selection, call
 	const { label, compose, onSubmitted } = action ?? restyle;
 
 	const submit = () => {
+		if (choice) {
+			choice.onChoose(card);
+			onClose();
+			return;
+		}
 		submitToAi(compose(card, ASPECTS.filter((a) => aspects.has(a))));
 		onSubmitted?.();
 		showChat();
@@ -66,7 +72,7 @@ export function ReferenceViewer({ card, onClose, action, locale, selection, call
 				</p>
 			)}
 			{fullPage === "failed" && <p className="text-xs text-muted">{s.fullPageFailed}</p>}
-			<fieldset className="space-y-1.5">
+			{!choice && <fieldset className="space-y-1.5">
 				<legend className="mb-1.5 text-muted">{s.borrow}</legend>
 				{ASPECTS.map((aspect) => (
 					<label key={aspect} className="flex cursor-pointer items-center gap-2">
@@ -74,10 +80,10 @@ export function ReferenceViewer({ card, onClose, action, locale, selection, call
 						{s.aspects[aspect]}
 					</label>
 				))}
-			</fieldset>
-			{selection && !action && <p className="text-xs text-muted">{s.selectionOnly(selection.elements.length)}</p>}
-			<Button variant="primary" disabled={!aspects.size} onClick={submit} className="justify-center">
-				{label}
+			</fieldset>}
+			{selection && !action && !choice && <p className="text-xs text-muted">{s.selectionOnly(selection.elements.length)}</p>}
+			<Button variant="primary" disabled={!choice && !aspects.size} onClick={submit} className="justify-center">
+				{choice?.label ?? label}
 			</Button>
 		</ScreenshotView>
 	);

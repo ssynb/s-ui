@@ -10,4 +10,5 @@ export * from "./module-kit.ts";
 export const MODULES: Record<string, ModuleHandler> = {
 	references: referencesModule,
 	polish: polishModule,
+	style: (await import("./modules/style.ts")).styleModule,
 };
