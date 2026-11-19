@@ -110,3 +110,20 @@ test("pages from other origins cannot operate the preview", async () => {
 	assert.equal(reply, "no reply");
 	await page.close();
 });
+
+test("page-scoped trial styles survive reloads, but are removed when preview navigation changes the route", async (t) => {
+	const { page, frame, op } = await openWorkbench();
+	t.after(() => page.close());
+	await op({ name: "applyLayer", id: "theme", css: ":root { --sui-color-primary: #111111; }" });
+	await op({ name: "applyLayer", id: "trial", css: ":root { --sui-color-primary: #e11d48; }", pageHref: frame.url() });
+	assert.equal(await buttonBackground(frame), "rgb(225, 29, 72)");
+	await frame.evaluate(() => location.reload());
+	await page.waitForFunction(() => (window as any).announcements.filter((event: string) => event === "ready").length >= 2);
+	assert.equal(await buttonBackground(frame), "rgb(225, 29, 72)");
+	const oldHref = frame.url();
+	await frame.evaluate(() => history.pushState({}, "", "/another-page"));
+	assert.equal(await buttonBackground(frame), "rgb(17, 17, 17)");
+	await assert.rejects(op({ name: "applyLayer", id: "trial", css: ":root { --sui-color-primary: #e11d48; }", pageHref: oldHref }));
+	await frame.evaluate(() => history.replaceState({}, "", "/"));
+	assert.equal(await buttonBackground(frame), "rgb(17, 17, 17)");
+});
