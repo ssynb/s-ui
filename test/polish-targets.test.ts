@@ -15,6 +15,13 @@ async function fixture(t: import("node:test").TestContext) {
  return page;
 }
 
+async function finishButtonTransitions(page: import("playwright").Page) {
+ await page.locator("button").evaluateAll(async buttons => {
+  // getAnimations flushes pending style changes; finished resolves on the real transition end.
+  await Promise.all(buttons.flatMap(button => button.getAnimations()).map(animation => animation.finished));
+ });
+}
+
 test("inspection exposes distinguishable, non-overlapping instances; a trial and application default to one, with explicit group scope", async t => {
  const page = await fixture(t);
  const inspection = await page.evaluate(inspectPage);
@@ -28,8 +35,10 @@ test("inspection exposes distinguishable, non-overlapping instances; a trial and
  assert.equal(await page.locator(all.groupSelector).count(), 2);
  assert.equal(await page.locator(buttons.instances![0]!.selector).and(page.locator(buttons.instances![1]!.selector)).count(), 0);
  const style = await page.addStyleTag({ content: componentLayer(one, "soft") });
+ await finishButtonTransitions(page);
  assert.notEqual(await page.locator("button").nth(0).evaluate(e => getComputedStyle(e).backgroundColor), await page.locator("button").nth(1).evaluate(e => getComputedStyle(e).backgroundColor));
  await style.evaluate((e, css) => e.textContent = css, componentLayer(all, "soft"));
+ await finishButtonTransitions(page);
  assert.equal(await page.locator("button").nth(0).evaluate(e => getComputedStyle(e).backgroundColor), await page.locator("button").nth(1).evaluate(e => getComputedStyle(e).backgroundColor));
  const request = componentRequest({ found: one, variant: "soft", reasons: {}, locale: "en" });
  assert.ok(request.includes(one.selector));
