@@ -185,8 +185,8 @@ export function useWorkspace() {
 		[request],
 	);
 	const prompt = useCallback(
-		(text: string, { annotation, images }: { annotation?: Annotation; images?: ImageAttachment[] } = {}) =>
-			sessionId && send({ type: "prompt", sessionId, text, annotation, images }),
+		(text: string, { annotation, annotations, images }: { annotation?: Annotation; annotations?: Annotation[]; images?: ImageAttachment[] } = {}) =>
+			sessionId && send({ type: "prompt", sessionId, text, annotation, annotations, images }),
 		[send, sessionId],
 	);
 	const abort = useCallback(() => sessionId && send({ type: "abort", sessionId }), [send, sessionId]);

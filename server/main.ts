@@ -121,7 +121,7 @@ function connect(ws: WebSocket) {
 			const result = msg.type === "selectPage" ? session.selectPage(msg.path) : await session.capturePage(msg.path);
 			return send({ type: "moduleResult", requestId: msg.requestId, result });
 		}
-		if (msg.type === "prompt") return session.prompt(msg.text, { annotation: msg.annotation, images: msg.images });
+		if (msg.type === "prompt") return session.prompt(msg.text, { annotation: msg.annotation, annotations: msg.annotations, images: msg.images });
 		if (msg.type === "abort") return session.abort();
 		if (msg.type === "setModel") return session.setModel(await usableModel(msg.model));
 		if (msg.type === "newConversation") return session.newConversation();

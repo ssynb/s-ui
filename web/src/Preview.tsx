@@ -1,12 +1,12 @@
-import { MousePointer2, PenLine, RotateCw, X } from "lucide-react";
-import { type ReactNode, type RefObject, useEffect, useRef, useState } from "react";
+import { MousePointer2, RotateCw, X } from "lucide-react";
+import { type ReactNode, type RefObject, type Dispatch, type SetStateAction, useEffect, useRef, useState } from "react";
 import type { PageCapture } from "../../server/page-capture.ts";
-import { type Annotation, PAGE_CAPTURE_MESSAGE, type Point } from "../../server/protocol.ts";
+import { type Annotation, ANNOTATION_PAGE_MESSAGE, PAGE_CAPTURE_MESSAGE, type Point } from "../../server/protocol.ts";
 import type { T } from "./i18n.ts";
+import { AnnotationEditor, AnnotationLayer, AnnotationMarks } from "./AnnotationEditor.tsx";
 import { Button, IconButton, Spinner } from "./ui.tsx";
 import type { Preview as PreviewState } from "./useWorkspace.ts";
 
-const MIN_STROKE_POINTS = 3;
 const PAGE_CAPTURE_TIMEOUT_MS = 5000;
 
 type Stroke = Omit<Annotation, "capture">;
@@ -20,7 +20,7 @@ function requestCapture(frame: HTMLIFrameElement, previewUrl: string, stroke: Po
 			reject(new Error("page capture timeout"));
 		}, PAGE_CAPTURE_TIMEOUT_MS);
 		function onMessage(e: MessageEvent) {
-			if (e.source !== frame.contentWindow || e.data?.type !== PAGE_CAPTURE_MESSAGE || e.data.id !== id) return;
+			if (e.source !== frame.contentWindow || e.origin !== new URL(previewUrl).origin || e.data?.type !== PAGE_CAPTURE_MESSAGE || e.data.id !== id) return;
 			clearTimeout(timer);
 			removeEventListener("message", onMessage);
 			resolve(e.data.capture);
@@ -29,9 +29,6 @@ function requestCapture(frame: HTMLIFrameElement, previewUrl: string, stroke: Po
 		frame.contentWindow!.postMessage({ type: PAGE_CAPTURE_MESSAGE, id, stroke }, new URL(previewUrl).origin);
 	});
 }
-
-const STROKE_COLOR = "#ef4444";
-const POPOVER_WIDTH_PX = 360;
 
 function PreviewStatus({ t, preview }: { t: T; preview: PreviewState }) {
 	const busy = preview.state === "installing" || preview.state === "starting";
@@ -57,111 +54,16 @@ function PreviewStatus({ t, preview }: { t: T; preview: PreviewState }) {
 	);
 }
 
-type LayerProps = {
-	t: T;
-	/** 已画好的圈：正在采集现场的或已采集完成的。 */
-	shown?: Stroke;
-	/** 现场已采集完、可以发送。 */
-	ready: boolean;
-	onStroke: (stroke: Stroke) => void;
-	onSubmit: (text: string) => void;
-	onExit: () => void;
-};
-
-/** 画圈覆盖层：在 iframe 上方记录一笔闭合手绘路径；松手即成为当前圈选，可附一句话发出，再按下会重画。 */
-function AnnotationLayer({ t, shown, ready, onStroke, onSubmit, onExit }: LayerProps) {
-	const layer = useRef<HTMLDivElement>(null);
-	const [drawing, setDrawing] = useState<Point[]>();
-	const [text, setText] = useState("");
-	const stroke = drawing ?? shown?.stroke ?? [];
-	const done = !drawing && stroke.length >= MIN_STROKE_POINTS;
-
-	useEffect(() => {
-		const onKey = (e: KeyboardEvent) => e.key === "Escape" && onExit();
-		addEventListener("keydown", onKey);
-		return () => removeEventListener("keydown", onKey);
-	}, [onExit]);
-
-	const pointOf = (e: React.PointerEvent): Point => {
-		const r = layer.current!.getBoundingClientRect();
-		return [Math.round(e.clientX - r.left), Math.round(e.clientY - r.top)];
-	};
-	const finish = () => {
-		const points = drawing;
-		setDrawing(undefined);
-		if (!points || points.length < MIN_STROKE_POINTS) return;
-		const { width, height } = layer.current!.getBoundingClientRect();
-		onStroke({ stroke: points, viewport: { width: Math.round(width), height: Math.round(height) } });
-	};
-	const [maxX, maxY] = stroke.reduce(([x, y], [px, py]) => [Math.max(x, px), Math.max(y, py)], [0, 0]);
-	const width = layer.current?.clientWidth ?? 0;
-	const height = layer.current?.clientHeight ?? 0;
-
-	return (
-		<div
-			ref={layer}
-			className="absolute inset-0 cursor-crosshair touch-none ring-2 ring-accent ring-inset"
-			onPointerDown={(e) => {
-				e.currentTarget.setPointerCapture(e.pointerId);
-				setDrawing([pointOf(e)]);
-			}}
-			onPointerMove={(e) => drawing && setDrawing([...drawing, pointOf(e)])}
-			onPointerUp={finish}
-		>
-			<svg className="pointer-events-none absolute inset-0 h-full w-full">
-				<polygon points={stroke.map((p) => p.join(",")).join(" ")} fill={`${STROKE_COLOR}14`} stroke={STROKE_COLOR} strokeWidth={3} strokeLinejoin="round" />
-			</svg>
-			{!done && (
-				<div
-					role="status"
-					className="pointer-events-auto absolute top-3 left-1/2 flex -translate-x-1/2 items-center gap-2 rounded-full bg-raised py-1 pr-1 pl-3 shadow-lg ring-1 ring-line"
-					onPointerDown={(e) => e.stopPropagation()}
-				>
-					<PenLine size={14} className="text-accent" />
-					<span>{t.drawingBanner}</span>
-					<kbd className="rounded bg-hover px-1.5 font-sans text-xs text-muted">{t.escToExit}</kbd>
-					<IconButton label={t.exitDraw} onClick={onExit} className="size-6 rounded-full">
-						<X size={14} />
-					</IconButton>
-				</div>
-			)}
-			{done && (
-				<form
-					className="absolute flex items-center gap-1.5 rounded-lg bg-raised p-1.5 shadow-xl ring-1 ring-line"
-					style={{ width: POPOVER_WIDTH_PX, left: Math.max(8, Math.min(maxX - POPOVER_WIDTH_PX / 2, width - POPOVER_WIDTH_PX - 8)), top: Math.min(maxY + 8, height - 52) }}
-					onPointerDown={(e) => e.stopPropagation()}
-					onSubmit={(e) => {
-						e.preventDefault();
-						if (text.trim() && ready) onSubmit(text.trim());
-					}}
-				>
-					<input
-						autoFocus
-						value={text}
-						onChange={(e) => setText(e.target.value)}
-						aria-label={t.annotationPlaceholder}
-						placeholder={t.annotationPlaceholder}
-						className="h-7 min-w-0 flex-1 rounded-md bg-panel px-2 ring-1 ring-line ring-inset placeholder:text-faint focus:ring-accent focus:outline-none"
-					/>
-					<Button type="submit" variant="primary" disabled={!text.trim() || !ready}>
-						{ready ? t.send : <Spinner />}
-					</Button>
-					<IconButton label={t.exitDraw} onClick={onExit}>
-						<X size={14} />
-					</IconButton>
-				</form>
-			)}
-		</div>
-	);
-}
-
 type PreviewProps = {
 	t: T;
 	preview?: PreviewState;
 	onChoosePage?: () => void;
 	/** 当前圈选（含画圈那一刻的页面现场），由上层持有，工具窗面板也能用。 */
-	selection?: Annotation;
-	onSelectionChange: (selection?: Annotation) => void;
+	selection: Annotation[];
+	onSelectionChange: Dispatch<SetStateAction<Annotation[]>>;
+	onCapturing: (value: boolean) => void;
+	request: string;
+	onRequestChange: (value: string) => void;
 	/** 在画圈弹框里写了一句话并发送。 */
 	onSubmitSelection: (text: string) => void;
 	/** 项目还没有页面（预览状态 empty）时预览区显示的内容。 */
@@ -171,35 +73,58 @@ type PreviewProps = {
 	frame: RefObject<HTMLIFrameElement | null>;
 };
 
-export function Preview({ t, preview, onChoosePage, selection, onSelectionChange, onSubmitSelection, empty, missing, frame }: PreviewProps) {
+export function Preview({ t, preview, onChoosePage, selection, onSelectionChange, onCapturing, request: text, onRequestChange: setText, onSubmitSelection, empty, missing, frame }: PreviewProps) {
 	const [annotating, setAnnotating] = useState(false);
-	const [capturing, setCapturing] = useState<Stroke>();
+	const [capturing, setCapturing] = useState(false);
 	const [error, setError] = useState("");
 	const [reloads, setReloads] = useState(0);
-	const latestCapture = useRef(0);
+	const generation = useRef(0);
+	const nextNumber = useRef(1);
+	const pageState = useRef<{ documentId: string; href: string } | undefined>(undefined);
+	const [view, setView] = useState<string>();
 	const url = preview?.state === "ready" ? preview.url : undefined;
-
-	// 松手就采集现场：圈选应反映画圈那一刻的页面，而不是发送时的。
+	const clear = () => {
+		generation.current++;
+		onSelectionChange([]);
+		setText(""); setCapturing(false); onCapturing(false); setError("");
+		nextNumber.current = 1;
+	};
+	useEffect(() => {
+		clear(); pageState.current = undefined;
+		function onMessage(e: MessageEvent) {
+			if (!url || e.source !== frame.current?.contentWindow || e.origin !== new URL(url).origin || e.data?.type !== ANNOTATION_PAGE_MESSAGE) return;
+			const state = e.data;
+			if (state.leaving) {
+				if (pageState.current?.documentId === state.documentId) { clear(); pageState.current = undefined; }
+				return;
+			}
+			if (pageState.current && (pageState.current.documentId !== state.documentId || pageState.current.href !== state.href)) clear();
+			pageState.current = state;
+			setView(state.view);
+		}
+		addEventListener("message", onMessage);
+		return () => { generation.current++; onCapturing(false); removeEventListener("message", onMessage); };
+	}, [url]);
+	useEffect(() => {
+		if (!selection.length && !capturing) { nextNumber.current = 1; setText(""); }
+	}, [selection.length, capturing]);
 	const capture = async (stroke: Stroke) => {
-		const attempt = ++latestCapture.current;
-		setCapturing(stroke);
-		setError("");
-		onSelectionChange(undefined);
+		const attempt = generation.current;
+		const number = nextNumber.current++;
+		setCapturing(true); onCapturing(true); setError("");
 		try {
 			const captured = await requestCapture(frame.current!, url!, stroke.stroke);
-			if (attempt === latestCapture.current) onSelectionChange({ ...stroke, capture: captured });
+			if (attempt !== generation.current) return;
+			if (pageState.current && (captured.documentId !== pageState.current.documentId || captured.href !== pageState.current.href)) return;
+			onSelectionChange(items => [...items, { ...stroke, number, capture: captured }]);
 		} catch {
-			if (attempt === latestCapture.current) setError(t.captureFailed);
+			if (attempt === generation.current) setError(t.captureFailed);
 		} finally {
-			if (attempt === latestCapture.current) setCapturing(undefined);
+			if (attempt === generation.current) { setCapturing(false); onCapturing(false); }
 		}
 	};
-	const exit = () => {
-		latestCapture.current++;
-		setAnnotating(false);
-		setCapturing(undefined);
-		onSelectionChange(undefined);
-	};
+	const exit = () => setAnnotating(false);
+
 	return (
 		<section aria-label={t.previewTab} className="flex min-h-0 flex-1 flex-col bg-panel">
 			<div role="tablist" className="flex h-9 shrink-0 items-end border-b border-line bg-app px-1">
@@ -209,7 +134,7 @@ export function Preview({ t, preview, onChoosePage, selection, onSelectionChange
 				</div>
 			</div>
 			<div className="flex h-9 shrink-0 items-center gap-1 border-b border-line px-1.5">
-				<IconButton label={t.reload} disabled={!url} onClick={() => setReloads((n) => n + 1)}>
+				<IconButton label={t.reload} disabled={!url} onClick={() => { clear(); setReloads((n) => n + 1); }}>
 					<RotateCw size={14} />
 				</IconButton>
 				<div className="flex h-7 min-w-0 flex-1 items-center rounded-md bg-app px-2 font-mono text-xs text-muted">
@@ -237,7 +162,7 @@ export function Preview({ t, preview, onChoosePage, selection, onSelectionChange
 			)}
 			<div className="relative min-h-0 flex-1">
 				{url ? (
-					<iframe key={reloads} ref={frame} title={t.previewTab} src={url} className="absolute inset-0 h-full w-full border-0 bg-white" />
+					<iframe onLoad={() => { clear(); pageState.current = undefined; frame.current?.contentWindow?.postMessage({ type: ANNOTATION_PAGE_MESSAGE }, new URL(url).origin); }} key={reloads} ref={frame} title={t.previewTab} src={url} className="absolute inset-0 h-full w-full border-0 bg-white" />
 				) : (
 					preview &&
 					(preview.state === "missing" ? missing : preview.state === "empty" ? (
@@ -246,19 +171,13 @@ export function Preview({ t, preview, onChoosePage, selection, onSelectionChange
 						<PreviewStatus t={t} preview={preview} />
 					))
 				)}
-				{url && annotating && (
-					<AnnotationLayer
-						t={t}
-						shown={capturing ?? selection}
-						ready={Boolean(selection) && !capturing}
-						onStroke={capture}
-						onExit={exit}
-						onSubmit={(text) => {
-							onSubmitSelection(text);
-							setAnnotating(false);
-						}}
-					/>
-				)}
+				{url && <AnnotationMarks selection={selection} view={view} />}
+				{url && annotating && <AnnotationLayer t={t} disabled={capturing} onStroke={capture} onExit={exit} />}
+				{selection.length > 0 && <AnnotationEditor
+					t={t} selection={selection} onChange={onSelectionChange} request={text} onRequestChange={setText} disabled={capturing}
+					onSubmit={() => { onSubmitSelection(text.trim()); clear(); setAnnotating(false); }}
+				/>}
+
 			</div>
 		</section>
 	);

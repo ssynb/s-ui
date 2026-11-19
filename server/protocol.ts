@@ -5,12 +5,13 @@ export type Point = [x: number, y: number];
 export type Viewport = { width: number; height: number };
 
 /** 工作台请预览 iframe 采集现场时 postMessage 用的消息类型（请求与回复相同）。 */
+export const ANNOTATION_PAGE_MESSAGE = "s-ui:annotation-page";
 export const PAGE_CAPTURE_MESSAGE = "s-ui:page-capture";
 /** 工作台操作预览页面（临时样式层、字体、识别组件、读设计变量）时 postMessage 用的消息类型（请求与回复相同）。 */
 export const PREVIEW_OP_MESSAGE = "s-ui:preview-op";
 
 /** 用户在预览上画的圈：坐标是预览视口内的 CSS 像素；capture 是预览页面在画圈那一刻的现场。 */
-export type Annotation = { stroke: Point[]; viewport: Viewport; capture: PageCapture };
+export type Annotation = { stroke: Point[]; viewport: Viewport; capture: PageCapture; number?: number; note?: string };
 
 /** 随消息交给 AI 的图片（如参考页面截图）。 */
 export type ImageAttachment = { data: string; mimeType: ImageMimeType };
@@ -62,7 +63,7 @@ export type ClientMessage =
 	| { type: "open"; requestId: string; dir: string; model: string }
 	| { type: "createProject"; requestId: string; parent: string; name: string; model: string }
 	| { type: "listFolder"; requestId: string; path: string }
-	| { type: "prompt"; sessionId: string; text: string; annotation?: Annotation; images?: ImageAttachment[] }
+	| { type: "prompt"; sessionId: string; text: string; annotation?: Annotation; annotations?: Annotation[]; images?: ImageAttachment[] }
 	| { type: "module"; requestId: string; sessionId?: string; module: string; action: string; payload: unknown }
 	| { type: "abort"; sessionId: string }
 	| { type: "setModel"; sessionId: string; model: string }

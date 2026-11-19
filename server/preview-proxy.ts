@@ -4,22 +4,20 @@ import { DESIGN_TOKENS } from "./design-tokens.ts";
 import { capturePage } from "./page-capture.ts";
 import { inspectPage } from "./page-inspect.ts";
 import { installPreviewOps } from "./preview-ops.ts";
-import { PAGE_CAPTURE_MESSAGE, PREVIEW_OP_MESSAGE } from "./protocol.ts";
+import { installAnnotationBridge } from "./annotation-bridge.ts";
+import { ANNOTATION_PAGE_MESSAGE, PAGE_CAPTURE_MESSAGE, PREVIEW_OP_MESSAGE } from "./protocol.ts";
 
 
 // 预览 iframe 与工作台不同源，工作台读不到里面的页面；注入这段脚本，只应工作台页面的请求：
 // 在用户此刻的真实页面上采集圈注现场，以及执行预览操作（临时样式层、字体、识别组件、读设计变量）。
 function bridgeScript(appOrigins: string[]) {
-	const type = JSON.stringify(PAGE_CAPTURE_MESSAGE);
+	const captureConfig = `{ origins: allowed, capture: capturePage, captureMessage: ${JSON.stringify(PAGE_CAPTURE_MESSAGE)}, pageMessage: ${JSON.stringify(ANNOTATION_PAGE_MESSAGE)} }`;
 	const opsConfig = `{ allowed, type: ${JSON.stringify(PREVIEW_OP_MESSAGE)}, tokenNames: ${JSON.stringify(DESIGN_TOKENS.map((t) => t.name))}, inspect: inspectPage }`;
 	return `<script>(() => {
 const allowed = ${JSON.stringify(appOrigins)};
 const capturePage = (${capturePage.toString()});
+(${installAnnotationBridge.toString()})(${captureConfig});
 const inspectPage = (${inspectPage.toString()});
-addEventListener("message", (e) => {
-	if (e.source !== parent || !allowed.includes(e.origin) || e.data?.type !== ${type}) return;
-	parent.postMessage({ type: ${type}, id: e.data.id, capture: capturePage(e.data.stroke) }, e.origin);
-});
 const start = () => (${installPreviewOps.toString()})(${opsConfig});
 // 样式层要挂在 <html> 末尾，等文档解析完再装。
 if (document.readyState === "loading") addEventListener("DOMContentLoaded", start, { once: true });

@@ -1,7 +1,7 @@
 import { mkdir, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { type AgentSession, type AgentSessionEvent, type ModelRuntime, SessionManager } from "@earendil-works/pi-coding-agent";
-import { type CircledElement, renderAnnotation } from "./annotate.ts";
+import { renderAnnotations } from "./multi-annotation.ts";
 import {
 	conversationsDir,
 	createAgent,
@@ -16,7 +16,7 @@ import { captureProjectPage } from "./project-page-shot.ts";
 import { DevServer, hasDevScript } from "./dev-server.ts";
 import { assertUsable, isUsable, type Model, modelKey } from "./models.ts";
 import { type PreviewProxy, startPreviewProxy } from "./preview-proxy.ts";
-import { type Annotation, type ConversationInfo, type ExclusiveTask, IMAGE_MIME_TYPES, type ImageAttachment, type SessionEvent, type Viewport } from "./protocol.ts";
+import { type Annotation, type ConversationInfo, type ExclusiveTask, IMAGE_MIME_TYPES, type ImageAttachment, type SessionEvent } from "./protocol.ts";
 
 type PreviewEvent = Extract<SessionEvent, { type: "preview" }>;
 type Listener = (event: SessionEvent) => void;
@@ -39,22 +39,6 @@ function busy(task: ExclusiveTask, advice: string) {
 }
 
 const CHAT_EVENTS = new Set<SessionEvent["type"]>(["user", "assistant_delta", "assistant_end", "tool", "error"]);
-
-function describeElements(elements: CircledElement[]) {
-	return elements
-		.map((e, i) => [`${i + 1}. selector: ${e.selector}`, `   source: ${e.sources.join(", ") || "unknown"}`, `   html: ${e.html}`].join("\n"))
-		.join("\n");
-}
-
-function annotationPrompt(text: string, elements: CircledElement[], viewport: Viewport) {
-	return `The user circled an area of the page preview (red outline in the attached screenshot, viewport ${viewport.width}x${viewport.height}) and said:
-"${text}"
-
-Elements inside the circle:
-${describeElements(elements) || "(none detected)"}
-
-Change the project's source code to fulfil the request.`;
-}
 
 /**
  * 一个项目文件夹的会话：拥有该项目的对话（pi 持久化会话，可新建、切换）和 dev server 进程的完整生命周期。
@@ -136,18 +120,21 @@ export class ProjectSession {
 	}
 
 	/** 发一条消息，可附图片；带圈注时先渲染圈注截图并找出圈内元素。失败以 error 事件报告。 */
-	async prompt(text: string, { annotation, images = [] }: { annotation?: Annotation; images?: ImageAttachment[] } = {}) {
+	async prompt(text: string, { annotation, annotations = annotation ? [annotation] : [], images = [] }: { annotation?: Annotation; annotations?: Annotation[]; images?: ImageAttachment[] } = {}) {
 		try {
 			for (const image of images) {
 				if (!IMAGE_MIME_TYPES.includes(image.mimeType)) throw new Error(`Unsupported image type: ${image.mimeType}`);
 			}
 			// 渲染圈注较慢，在排队之外做；排队只覆盖“记入当前对话并交给 pi”这一步。
-			const { fullText, image } = await this.#withAnnotation(text, annotation);
-			const all = [...(image ? [{ data: image, mimeType: "image/png" as const }] : []), ...images];
+			const previewUrl = this.#preview.url;
+			const { fullText, images: screenshots } = await this.#withAnnotations(text, annotations);
+			const all = [...screenshots, ...images];
+			const displayText = [text, ...annotations.flatMap((a, i) => a.note ? [`Circle ${a.number ?? i + 1}: ${a.note}`] : [])].filter(Boolean).join("\n");
 			await this.#serialized(() => {
+				if (annotations.length && this.#preview.url !== previewUrl) throw new Error("Annotation page changed before sending");
 				if (this.#exclusive) throw busy(this.#exclusive, "send your message when it finishes");
-				this.#emit({ type: "user", text, images: all.map((i) => `data:${i.mimeType};base64,${i.data}`) });
-				recordDisplayText(this.#agent, text);
+				this.#emit({ type: "user", text: displayText, images: all.map((i) => `data:${i.mimeType};base64,${i.data}`) });
+				recordDisplayText(this.#agent, displayText);
 				return this.#dispatch(fullText, all);
 			});
 		} catch (error) {
@@ -286,13 +273,14 @@ export class ProjectSession {
 		];
 	}
 
-	async #withAnnotation(text: string, annotation?: Annotation) {
-		if (!annotation) return { fullText: text };
+	async #withAnnotations(text: string, annotations: Annotation[]) {
+		if (!annotations.length) return { fullText: text, images: [] };
 		if (this.#preview.state !== "ready" || !this.#preview.url) throw new Error("Preview is not running");
-		const { href } = annotation.capture;
-		if (new URL(href).origin !== new URL(this.#preview.url).origin) throw new Error(`Annotation page is not the preview: ${href}`);
-		const result = await renderAnnotation({ ...annotation, projectDir: this.dir });
-		return { fullText: annotationPrompt(text, result.elements, annotation.viewport), image: result.png.toString("base64") };
+		const href = annotations[0]!.capture.href;
+		for (const annotation of annotations) {
+			if (annotation.capture.href !== href || new URL(href).origin !== new URL(this.#preview.url).origin) throw new Error(`Annotation page is not the preview: ${annotation.capture.href}`);
+		}
+		return renderAnnotations(text, annotations, this.dir);
 	}
 
 	#emit(event: SessionEvent) {
