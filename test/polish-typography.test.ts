@@ -45,3 +45,19 @@ test('independent typography previews survive saving and refreshing a legacy Vit
  assert.deepEqual(await families(), ['serif','monospace','monospace','monospace'], 'controls can follow body again');
  assert.equal((await readFile(join(dir,TOKENS_FILE),'utf8')).includes('https://example.com/layout.css'), true);
 });
+
+test('font selection preserves existing relative imports and only rejects new unsafe imports', async t => {
+ const dir = await mkdtemp(join(tmpdir(), 'typography-imports-'));
+ t.after(() => rm(dir, { recursive: true, force: true }));
+ await mkdir(join(dir, 'src'));
+ const original = '@import url("./icons.css");\n@import "./layout.css";\n:root {\n' + DESIGN_TOKENS.filter(x => x.name !== '--sui-font-ui').map(x => `${x.name}: initial;`).join('\n') + '\n}';
+ await writeFile(join(dir, TOKENS_FILE), original);
+ const status = await readTokensStatus(dir);
+ const payload = savePayload({ tokens: { '--sui-font-heading': 'serif' }, fontImports: ['https://example.com/new-font.css'] }, status);
+ await saveTokens(dir, payload.values, payload.fontImports);
+ const saved = await readFile(join(dir, TOKENS_FILE), 'utf8');
+ assert.ok(saved.includes('@import url("./icons.css");'));
+ assert.ok(saved.includes('@import "./layout.css";'));
+ await assert.rejects(saveTokens(dir, {}, ['./new-unsafe.css']));
+ assert.equal(await readFile(join(dir, TOKENS_FILE), 'utf8'), saved);
+});
