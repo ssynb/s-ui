@@ -23,11 +23,11 @@ function keys(value: Record<string, unknown>, allowed: string[]) {
 }
 function validValue(property: string, value: string) {
 	if (!Object.hasOwn(STYLE_PROPERTIES, property)) return false;
-	if (["color", "background-color", "border-color"].includes(property)) return /^#[\da-f]{6}$/i.test(value);
-	const ranges: Record<string, [number, number]> = { "font-size": [12, 64], padding: [0, 48], gap: [0, 48], "margin-bottom": [0, 64], "border-radius": [0, 32] };
-	const range = ranges[property];
-	if (range) return /^\d{1,2}px$/.test(value) && parseInt(value) >= range[0] && parseInt(value) <= range[1];
-	return STYLE_PROPERTIES[property as keyof typeof STYLE_PROPERTIES].split(" | ").includes(value);
+	const rule = STYLE_PROPERTIES[property as keyof typeof STYLE_PROPERTIES];
+	if (rule === "#RRGGBB") return /^#[\da-f]{6}$/i.test(value);
+	const range = /^(\d+)–(\d+)px$/.exec(rule);
+	if (range) return /^\d+px$/.test(value) && parseInt(value) >= Number(range[1]) && parseInt(value) <= Number(range[2]);
+	return rule.split(" | ").includes(value);
 }
 
 export function parseStylePlan(value: unknown, page: PageInspection): StylePlan {

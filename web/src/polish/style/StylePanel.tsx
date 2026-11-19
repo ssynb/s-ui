@@ -6,6 +6,7 @@ import { SimilarProducts } from "../../references/SimilarProducts.tsx";
 import { Button, Spinner } from "../../ui.tsx";
 import { STRINGS } from "./strings.ts";
 import { StyleTrial } from "./trial.ts";
+import { onPreviewPageChanged } from "./lifecycle.ts";
 
 export function StylePanel({ panel }: { panel: PanelProps }) {
 	return <PageStyle key={`${panel.project.dir}:${panel.project.previewUrl}`} panel={panel} />;
@@ -32,22 +33,29 @@ function PageStyle({ panel }: { panel: PanelProps }) {
 	const [working, setWorking] = useState(false);
 	const [error, setError] = useState("");
 	const generation = useRef(0);
+	const attempted = useRef(false);
 
 	useEffect(() => {
-		++generation.current;
-		setPlan(undefined);
-		setWorking(false);
-		// Invalidate replies while leaving; clear persisted styles again when the frame becomes ready.
-		trial.cancel().catch((e: unknown) => setError(String(e)));
-		return () => {
+		if (!panel.project.previewUrl) return;
+		const unsubscribe = onPreviewPageChanged(panel.project.previewUrl, () => {
 			++generation.current;
-			trial.cancel().catch((e: unknown) => setError(String(e)));
+			trial.invalidate();
+			setPlan(undefined);
+			setWorking(false);
+			if (attempted.current) setError(STRINGS[latest.current.locale].changed);
+			attempted.current = false;
+		});
+		return () => {
+			unsubscribe();
+			++generation.current;
+			trial.cancel().catch((error: unknown) => console.error("Style preview cleanup failed", error));
 		};
-	}, [panel.preview.ready, trial]);
+	}, [panel.project.previewUrl, trial]);
 
 	const run = async () => {
 		if (!reference) return;
 		const id = ++generation.current;
+		attempted.current = true;
 		setWorking(true);
 		setError("");
 		setPlan(undefined);
@@ -65,6 +73,7 @@ function PageStyle({ panel }: { panel: PanelProps }) {
 	};
 	const cancel = async () => {
 		++generation.current;
+		attempted.current = false;
 		setWorking(true);
 		setPlan(undefined);
 		try { await trial.cancel(); setError(""); } catch (e) { setError(String(e)); }

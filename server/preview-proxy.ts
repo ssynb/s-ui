@@ -3,6 +3,7 @@ import { connect, type AddressInfo, type Socket } from "node:net";
 import { DESIGN_TOKENS } from "./design-tokens.ts";
 import { capturePage } from "./page-capture.ts";
 import { inspectPage } from "./page-inspect.ts";
+import { STYLE_LAYER } from "./modules/style-scope.ts";
 import { installPreviewOps } from "./preview-ops.ts";
 import { PAGE_CAPTURE_MESSAGE, PREVIEW_OP_MESSAGE } from "./protocol.ts";
 
@@ -11,7 +12,7 @@ import { PAGE_CAPTURE_MESSAGE, PREVIEW_OP_MESSAGE } from "./protocol.ts";
 // 在用户此刻的真实页面上采集圈注现场，以及执行预览操作（临时样式层、字体、识别组件、读设计变量）。
 function bridgeScript(appOrigins: string[]) {
 	const type = JSON.stringify(PAGE_CAPTURE_MESSAGE);
-	const opsConfig = `{ allowed, type: ${JSON.stringify(PREVIEW_OP_MESSAGE)}, tokenNames: ${JSON.stringify(DESIGN_TOKENS.map((t) => t.name))}, inspect: inspectPage }`;
+	const opsConfig = `{ allowed, styleLayer: ${JSON.stringify(STYLE_LAYER)}, type: ${JSON.stringify(PREVIEW_OP_MESSAGE)}, tokenNames: ${JSON.stringify(DESIGN_TOKENS.map((t) => t.name))}, inspect: inspectPage }`;
 	return `<script>(() => {
 const allowed = ${JSON.stringify(appOrigins)};
 const capturePage = (${capturePage.toString()});

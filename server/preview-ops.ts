@@ -1,6 +1,7 @@
 // 预览页面里的“预览操作”处理（经预览代理注入，由工作台经 PREVIEW_OP_MESSAGE 调用）：
 // 临时样式层、网页字体、识别组件、读设计变量。installPreviewOps 必须自包含——它会被转成字符串注入页面。
 import type { PageInspection } from "./page-inspect.ts";
+import type { StyleInspection } from "./modules/style-scope.ts";
 
 /** 工作台发给预览的操作。 */
 export type PreviewOp =
@@ -15,12 +16,12 @@ export type PreviewOp =
 /** 工作台 → 预览：{ type, id, op }；预览 → 工作台：回复 { type, id, ok, result | error }，或通知 { type, event }。 */
 export type PreviewOpRequest = { type: string; id: number; op: PreviewOp };
 export type PreviewOpReply = { type: string; id: number; ok: true; result: unknown } | { type: string; id: number; ok: false; error: string };
-/** ready：桥接已就绪（页面每次加载一次）；leaving：页面即将卸载（刷新、跳转）。 */
+/** ready：当前页面可操作；leaving：旧页面离开（含 SPA 路由切换），其页面级样式已清除。 */
 export type PreviewAnnouncement = { type: string; event: "ready" | "leaving" };
 
-type Config = { allowed: string[]; type: string; tokenNames: string[]; inspect: () => PageInspection };
+type Config = { styleLayer: string; allowed: string[]; type: string; tokenNames: string[]; inspect: () => PageInspection };
 
-export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config) {
+export function installPreviewOps({ allowed, type, tokenNames, inspect, styleLayer }: Config) {
 	const STORE = "s-ui:preview-layers";
 	const LAYER = "data-sui-layer";
 	const FONT = "data-sui-font";
@@ -34,8 +35,15 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 			return { layers: [], fonts: [] };
 		}
 	};
+	const isScoped = (id: string) => id === styleLayer || id.startsWith(`${styleLayer}:`);
+	let stylePageId = crypto.randomUUID();
+	let pageUrl = location.href;
+	let active = true;
 	let saved = load();
-	const persist = () => sessionStorage.setItem(STORE, JSON.stringify(saved));
+	// Page-local styles must not be restored, including unscoped entries in existing storage.
+	saved.layers = saved.layers.filter(([id]) => !isScoped(id));
+	const persist = () => sessionStorage.setItem(STORE, JSON.stringify({ ...saved, layers: saved.layers.filter(([id]) => !isScoped(id)) }));
+	persist();
 
 	const layerElements = () => [...document.querySelectorAll<HTMLStyleElement>(`style[${LAYER}]`)];
 	// 样式层放在 <body> 之后、文档最末：比页面里任何 <head>/<body> 里的样式都晚，同优先级时覆盖它们。
@@ -84,6 +92,7 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 				return true;
 			case "applyLayer": {
 				const id = String(op.id);
+				if (isScoped(id) && (!active || id !== `${styleLayer}:${stylePageId}`)) throw new Error("The page changed; generate a new style preview");
 				const at = saved.layers.findIndex(([layer]) => layer === id);
 				if (at >= 0) saved.layers[at] = [id, String(op.css)];
 				else saved.layers.push([id, String(op.css)]);
@@ -102,7 +111,7 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 				return undefined;
 			}
 			case "inspect":
-				return inspect();
+				return { ...inspect(), stylePageId } satisfies StyleInspection;
 			case "readTokens": {
 				const style = getComputedStyle(document.documentElement);
 				return Object.fromEntries(tokenNames.map((name) => [name, style.getPropertyValue(name).trim()]).filter(([, value]) => value));
@@ -129,9 +138,39 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 			parent.postMessage({ type, id, ok: false, error: (error as Error).message }, e.origin);
 		}
 	});
-	// 通知只说明状态、不含页面数据，可以发给任意父页面（工作台来源有两个写法，逐个指定会在控制台报错）。
-	if (parent !== window) {
-		parent.postMessage({ type, event: "ready" }, "*");
-		addEventListener("pagehide", () => parent.postMessage({ type, event: "leaving" }, "*"));
+	// Cleanup belongs to the frame: it must work even if the panel has already unmounted.
+	const announce = (event: "ready" | "leaving") => {
+		if (parent !== window) parent.postMessage({ type, event }, "*");
+	};
+	const leave = () => {
+		active = false;
+		stylePageId = crypto.randomUUID();
+		saved.layers = saved.layers.filter(([id]) => !isScoped(id));
+		persist();
+		renderLayers();
+		announce("leaving");
+	};
+	const entered = () => {
+		pageUrl = location.href;
+		active = true;
+		announce("ready");
+	};
+	const changed = () => { leave(); entered(); };
+	const navigation = (window as Window & { navigation?: EventTarget }).navigation;
+	if (navigation) navigation.addEventListener("currententrychange", changed);
+	else {
+		for (const method of ["pushState", "replaceState"] as const) {
+			const original = history[method];
+			history[method] = function (...args: Parameters<History[typeof method]>) {
+				const result = original.apply(this, args);
+				changed();
+				return result;
+			};
+		}
+		addEventListener("popstate", changed);
+		addEventListener("hashchange", () => { if (location.href !== pageUrl) changed(); });
 	}
+	addEventListener("pagehide", leave);
+	addEventListener("pageshow", (event) => { if (event.persisted) entered(); });
+	entered();
 }

@@ -1,6 +1,7 @@
 import { type RefObject, useEffect, useMemo, useRef, useState } from "react";
 import type { PreviewAnnouncement, PreviewOp, PreviewOpReply } from "../../server/preview-ops.ts";
 import { PREVIEW_OP_MESSAGE } from "../../server/protocol.ts";
+import { previewPageChanged } from "./polish/style/lifecycle.ts";
 import type { PageInspection, PreviewControl, TokenValues } from "./panels.ts";
 
 const REPLY_TIMEOUT_MS = 15_000;
@@ -52,7 +53,10 @@ export function usePreviewControl(frame: RefObject<HTMLIFrameElement | null>, pr
 		const onMessage = (e: MessageEvent) => {
 			if (e.origin !== origin || e.source !== frame.current?.contentWindow || e.data?.type !== PREVIEW_OP_MESSAGE) return;
 			const data = e.data as PreviewAnnouncement | PreviewOpReply;
-			if ("event" in data) return data.event === "ready" ? becameReady() : setState(false);
+			if ("event" in data) {
+				previewPageChanged(previewUrl);
+				return data.event === "ready" ? becameReady() : setState(false);
+			}
 			const waiter = pending.current.get(data.id);
 			pending.current.delete(data.id);
 			if (data.ok) waiter?.resolve(data.result);

@@ -8,7 +8,7 @@ Node + TypeScript 后台（Node 原生类型剥离直接运行 `.ts`，无构建
 - 项目与选页发现：`server/project-discovery.ts`；`main.ts` 在创建会话前发现直接子项目，多个通过 `projectChoices` 回给界面，选中后才启动。`ProjectSession` 保存已发现的页面和选择，校验 `selectPage / capturePage` 的路径属于当前预览；`server/project-page-shot.ts` 只截该预览的真实成功 HTML 响应，不接受外部 URL、不跟随跳转。验收：`test/project-pages.test.ts`。
 - `server/dev-server.ts`：安装依赖、启动 `dev` 脚本、从输出识别本地地址、按进程组停止。
 - `server/preview-proxy.ts`：每个预览的本地反向代理（含 HMR WebSocket），向 HTML 注入桥接脚本，只应工作台页面的请求：在预览里采集圈注现场，执行预览操作。
-- `server/preview-ops.ts`：桥接脚本里的预览操作（自包含，注入页面）：临时样式层（放在文档最末并在有新节点追加到其后时移回最末，记在预览页面的 sessionStorage，刷新、热更新后自己恢复）、网页字体、识别组件、读设计变量；消息形状 `PreviewOp` / `PreviewOpReply` / `PreviewAnnouncement`（ready、leaving）。
+- `server/preview-ops.ts`：桥接脚本里的预览操作（自包含，注入页面）：临时样式层（放在文档最末并在有新节点追加到其后时移回最末，记在预览页面的 sessionStorage，刷新、热更新后自己恢复）、网页字体、识别组件、读设计变量；消息形状 `PreviewOp` / `PreviewOpReply` / `PreviewAnnouncement`（ready、leaving）。 风格试用层例外：按页面访问标识隔离，不持久化，SPA 切页与 pagehide 在预览端同步清除；普通打磨层继续刷新恢复。
 - `server/page-capture.ts`：在用户的预览页面里执行的采集函数（自包含，会被转成字符串注入）：找圈内元素、拍 DOM 快照。
 - `server/annotate.ts`：Playwright 以相同视口渲染快照、还原弹窗与滚动、画圈截图，并给圈内元素补源码位置。
 - `server/source-locator.ts`：按 id、文本、class 在项目源码里猜元素位置。
