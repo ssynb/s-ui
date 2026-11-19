@@ -32,5 +32,13 @@ export type TokenName = (typeof DESIGN_TOKENS)[number]["name"];
 /** 变量名 → CSS 值（原样写入 CSS，例如 "8px"、"#3574f0"、"'Inter', sans-serif"）。 */
 export type TokenValues = Partial<Record<TokenName, string>>;
 
-/** 控件字体的持久规则与临时预览共用范围，不覆盖正文链接、代码或图标。 */
-export const UI_FONT_RULE = `:is(button, input, textarea, select, [role="button"], [role="tab"], [role="menuitem"]) { font-family: var(--sui-font-ui, var(--sui-font-sans)) !important; }`;
+/** 用户明确换字体时才启用同一套预览和保存规则；旧项目可能定义了变量但没用到。 */
+export const FONT_RULES = {
+	"--sui-font-sans": `body { font-family: var(--sui-font-sans) !important; }`,
+	"--sui-font-heading": `:is(h1, h2, h3, h4, h5, h6, [role="heading"]) { font-family: var(--sui-font-heading) !important; }`,
+	"--sui-font-ui": `:is(button, input, textarea, select, [role="button"], [role="tab"], [role="menuitem"]) { font-family: var(--sui-font-ui, var(--sui-font-sans)) !important; }`,
+} as const;
+
+export function fontRules(values: TokenValues) {
+	return (Object.keys(FONT_RULES) as (keyof typeof FONT_RULES)[]).filter((name) => values[name]).map((name) => FONT_RULES[name]);
+}

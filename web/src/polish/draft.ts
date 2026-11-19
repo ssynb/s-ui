@@ -1,4 +1,4 @@
-import { UI_FONT_RULE } from "../../../server/design-tokens.ts";
+import { fontRules } from "../../../server/design-tokens.ts";
 import type { PolishApi, PolishStatus, TokenName, TokenValues } from "../panels.ts";
 
 /** 待保存的设计变量改动：预览里覆盖的变量值，以及换字体时要引入的网页字体样式表。 */
@@ -17,5 +17,5 @@ export function savePayload(draft: TokenDraft, status: PolishStatus): PolishApi[
 /** 覆盖设计变量的临时样式层。 */
 export function tokenLayer(tokens: TokenValues) {
 	const decls = Object.entries(tokens).map(([name, value]) => `${name}: ${value};`);
-	return decls.length ? `:root:root { ${decls.join(" ")} }${tokens["--sui-font-ui"] ? `\n${UI_FONT_RULE}` : ""}` : "";
+	return decls.length ? [`:root:root { ${decls.join(" ")} }`, ...fontRules(tokens)].join("\n") : "";
 }

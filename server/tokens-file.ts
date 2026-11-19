@@ -2,7 +2,7 @@
 import { existsSync } from "node:fs";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
-import { DESIGN_TOKENS, UI_FONT_RULE, type TokenName, TOKENS_FILE, type TokenValues } from "./design-tokens.ts";
+import { DESIGN_TOKENS, fontRules, type TokenName, TOKENS_FILE, type TokenValues } from "./design-tokens.ts";
 import type { PolishStatus } from "./modules/polish.ts";
 
 const TOKEN_NAMES = new Set<string>(DESIGN_TOKENS.map((t) => t.name));
@@ -82,7 +82,7 @@ export async function saveTokens(dir: string, values: TokenValues, fontImports?:
 		if (name === "--sui-font-ui" && !declaration(name).test(text)) text += `\n:root { --sui-font-ui: ${value!.trim()}; }\n`;
 		text = text.replace(declaration(name), (_m, head: string, _old: string, tail: string) => `${head}${value!.trim()}${tail}`);
 	}
-	if (values["--sui-font-ui"] && !text.includes(UI_FONT_RULE)) text += `\n${UI_FONT_RULE}\n`;
+	for (const rule of fontRules(values)) if (!text.includes(rule)) text += `\n${rule}\n`;
 	if (fontImports) text = replaceImports(text, fontImports);
 	await writeFile(path, text);
 	return readTokensStatus(dir);
