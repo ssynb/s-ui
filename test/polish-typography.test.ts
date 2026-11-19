@@ -30,13 +30,17 @@ test('independent typography previews survive saving and refreshing a legacy Vit
  const families = () => page.evaluate(() => ['h1','p','button','input'].map(s => getComputedStyle(document.querySelector(s)!).fontFamily));
  assert.deepEqual(await families(), ['serif','monospace','cursive','cursive'], 'preview respects all three independent roles');
  const payload = savePayload({ tokens, fontImports: ['https://example.com/new-font.css'] }, status);
+ const updated = new Promise<void>(resolve => server.watcher.once("change", () => resolve()));
  await saveTokens(dir, payload.values, payload.fontImports);
+ await updated;
  await page.reload();
  assert.deepEqual(await families(), ['serif','monospace','cursive','cursive'], 'saved typography survives reload');
  const saved = await readTokensStatus(dir);
  assert.deepEqual(saved.fontImports, [...imports, 'https://example.com/new-font.css']);
  assert.equal(saved.values['--sui-font-ui'], 'cursive');
+ const reset = new Promise<void>(resolve => server.watcher.once('change', () => resolve()));
  await saveTokens(dir, { '--sui-font-ui': 'var(--sui-font-sans)' });
+ await reset;
  await page.reload();
  assert.deepEqual(await families(), ['serif','monospace','monospace','monospace'], 'controls can follow body again');
  assert.equal((await readFile(join(dir,TOKENS_FILE),'utf8')).includes('https://example.com/layout.css'), true);
