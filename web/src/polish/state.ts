@@ -2,10 +2,8 @@ import { useEffect, useState } from "react";
 import type { ComponentKind, PageInspection, TokenValues } from "../panels.ts";
 import { componentLayer } from "./components.ts";
 import { type TokenDraft, tokenLayer } from "./draft.ts";
-import { FONT_PAIRS, fontTokens } from "./fonts.ts";
+import { FONTS, FONT_ROLES, type FontRole } from "./fonts.ts";
 import { MOTION_EFFECTS, motionLayer } from "./motion.ts";
-import { PALETTES, paletteTokens, primaryTokens } from "./palettes.ts";
-import { type ShapeKnob, shapeTokens } from "./shape.ts";
 import type { ParamValues } from "./types.ts";
 
 /** 在页面上试着的一种组件做法。 */
@@ -15,52 +13,45 @@ export type MotionTrial = { effect: string; kind: ComponentKind; params: ParamVa
 
 /** 打磨面板里还没保存（或还没交给 AI）的全部改动；页面上看到的临时样式全由它推出。 */
 export type PolishDraft = {
-	font?: string;
-	palette?: string;
-	primary?: string;
-	shape: Partial<Record<ShapeKnob, number>>;
+	fonts: Partial<Record<FontRole, string>>;
 	components: Partial<Record<ComponentKind, ComponentTrial>>;
 	motions: MotionTrial[];
 };
 
-export const EMPTY_DRAFT: PolishDraft = { shape: {}, components: {}, motions: [] };
+export const EMPTY_DRAFT: PolishDraft = { fonts: {}, components: {}, motions: [] };
 
 export const motionKey = (t: Pick<MotionTrial, "effect" | "kind">) => `${t.effect}-${t.kind}`;
 
-/** 字体、配色、形状改动对应的设计变量与字体样式表（保存时写进变量文件）。 */
+/** 字体改动对应的设计变量与字体样式表（保存时写进变量文件）。 */
 export function tokenDraft(d: PolishDraft): TokenDraft {
-	const pair = FONT_PAIRS.find((p) => p.id === d.font);
-	const palette = PALETTES.find((p) => p.id === d.palette);
-	const tokens: TokenValues = {
-		...(pair && fontTokens(pair)),
-		...(palette && paletteTokens(palette)),
-		...(d.primary && primaryTokens(d.primary)),
-	};
-	for (const [knob, value] of Object.entries(d.shape) as [ShapeKnob, number][]) Object.assign(tokens, shapeTokens(knob, value));
-	return pair ? { tokens, fontImports: pair.urls } : { tokens };
+	const tokens: TokenValues = {};
+	const imports = new Set<string>();
+	for (const [role, id] of Object.entries(d.fonts) as [FontRole, string][]) {
+		if (role === "ui" && id === "body") tokens[FONT_ROLES.ui] = "var(--sui-font-sans)";
+		const font = FONTS.find((f) => f.id === id);
+		if (!font) continue;
+		tokens[FONT_ROLES[role]] = font.family;
+		for (const url of font.urls) imports.add(url);
+	}
+	return { tokens, fontImports: [...imports] };
 }
 
-/** 未保存的改动项数：字体、配色、每个形状滑块、每类组件、每个动效各算一项。 */
+/** 未保存的改动项数：每类字体、每类组件、每个动效各算一项。 */
 export function changeCount(d: PolishDraft) {
 	return tokenChangeCount(d) + Object.keys(d.components).length + d.motions.length;
 }
 
 export function tokenChangeCount(d: PolishDraft) {
-	return (d.font ? 1 : 0) + (d.palette || d.primary ? 1 : 0) + Object.keys(d.shape).length;
+	return Object.keys(d.fonts).length;
 }
 
 /**
- * 保存成功后剩下的改动：只清掉保存时发出去、且之后没再动过的字体、配色、形状项；
+ * 保存成功后剩下的改动：只清掉保存时发出去、且之后没再动过的字体项；
  * 保存请求进行中又做的修改仍是未保存改动。
  */
 export function afterSave(current: PolishDraft, sent: PolishDraft): PolishDraft {
-	const next = { ...current, shape: { ...current.shape } };
-	if (next.font === sent.font) next.font = undefined;
-	if (next.palette === sent.palette && next.primary === sent.primary) {
-		next.palette = undefined;
-		next.primary = undefined;
-	}
-	for (const knob of Object.keys(sent.shape) as ShapeKnob[]) if (next.shape[knob] === sent.shape[knob]) delete next.shape[knob];
+	const next = { ...current, fonts: { ...current.fonts } };
+	for (const role of Object.keys(sent.fonts) as FontRole[]) if (next.fonts[role] === sent.fonts[role]) delete next.fonts[role];
 	return next;
 }
 

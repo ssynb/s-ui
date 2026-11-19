@@ -9,6 +9,7 @@ export type TokenGroup = "font" | "color" | "shape" | "density";
 /** 全部设计变量：名字、分组和含义（含义也写进给 AI 的整理要求）。 */
 export const DESIGN_TOKENS = [
 	{ name: "--sui-font-sans", group: "font", meaning: "body text font stack" },
+	{ name: "--sui-font-ui", group: "font", meaning: "optional control font stack; defaults to body; only added on explicit control font selection" },
 	{ name: "--sui-font-heading", group: "font", meaning: "heading font stack" },
 	{ name: "--sui-font-mono", group: "font", meaning: "monospace font stack" },
 	{ name: "--sui-font-size-base", group: "font", meaning: "base body font size" },
@@ -30,3 +31,6 @@ export const DESIGN_TOKENS = [
 export type TokenName = (typeof DESIGN_TOKENS)[number]["name"];
 /** 变量名 → CSS 值（原样写入 CSS，例如 "8px"、"#3574f0"、"'Inter', sans-serif"）。 */
 export type TokenValues = Partial<Record<TokenName, string>>;
+
+/** 控件字体的持久规则与临时预览共用范围，不覆盖正文链接、代码或图标。 */
+export const UI_FONT_RULE = `:is(button, input, textarea, select, [role="button"], [role="tab"], [role="menuitem"]) { font-family: var(--sui-font-ui, var(--sui-font-sans)) !important; }`;

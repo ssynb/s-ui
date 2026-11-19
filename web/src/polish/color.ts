@@ -1,9 +1,3 @@
-import type { FoundComponent, PageInspection } from "../panels.ts";
-
-// 颜色计算：WCAG 相对亮度与对比度，给主色挑一个可读的文字色。
-
-const AA_TEXT = 4.5;
-
 /** 解析 #rgb、#rrggbb、rgb()/rgba()，返回 0–255 的 RGB；认不出时为空。 */
 export function parseColor(value: string): [number, number, number] | undefined {
 	const v = value.trim();
@@ -14,45 +8,4 @@ export function parseColor(value: string): [number, number, number] | undefined 
 	}
 	const rgb = /^rgba?\(\s*([\d.]+)[\s,]+([\d.]+)[\s,]+([\d.]+)/i.exec(v);
 	return rgb ? [Number(rgb[1]), Number(rgb[2]), Number(rgb[3])] : undefined;
-}
-
-function luminance(value: string) {
-	const rgb = parseColor(value) ?? [0, 0, 0];
-	const [r, g, b] = rgb.map((c) => {
-		const x = c / 255;
-		return x <= 0.03928 ? x / 12.92 : ((x + 0.055) / 1.055) ** 2.4;
-	}) as [number, number, number];
-	return 0.2126 * r + 0.7152 * g + 0.0722 * b;
-}
-
-export function contrastRatio(a: string, b: string) {
-	const [hi, lo] = [luminance(a), luminance(b)].sort((x, y) => y - x) as [number, number];
-	return (hi + 0.05) / (lo + 0.05);
-}
-
-/** 主色上的文字色：白字够 4.5:1 就用白字，否则用黑字（任何底色上两者至少有一个达到 4.5:1）。 */
-export function readableOn(background: string) {
-	return contrastRatio(background, "#ffffff") >= AA_TEXT ? "#ffffff" : "#000000";
-}
-
-/** 转成 #rrggbb（供取色器使用）；认不出时为空。 */
-export function toHex(value: string) {
-	const rgb = parseColor(value);
-	return rgb && `#${rgb.map((c) => Math.round(c).toString(16).padStart(2, "0")).join("")}`;
-}
-
-const sameColor = (a: [number, number, number], b: [number, number, number]) => a.every((x, i) => Math.abs(x - b[i]!) <= 1);
-
-/**
- * 换了主色之后仍在用原主色的组件（文字、背景或边框里出现原主色）：多半是代码里写死的颜色，没有用设计变量。
- * 页面上已经找不到原主色时为空。
- */
-export function leftoverPrimary(inspection: PageInspection, originalPrimary: string): FoundComponent[] {
-	const original = parseColor(originalPrimary);
-	if (!original) return [];
-	const uses = (value: string) => [...value.matchAll(/rgba?\([^)]*\)/g)].some((m) => {
-		const rgb = parseColor(m[0]);
-		return rgb !== undefined && !/,\s*0\)$/.test(m[0]) && sameColor(rgb, original);
-	});
-	return inspection.components.filter((c) => Object.values(c.styles).some((v) => v && uses(v)));
 }

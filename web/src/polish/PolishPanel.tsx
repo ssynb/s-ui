@@ -1,8 +1,5 @@
 import { Check, CircleAlert, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
-import type { FoundComponent } from "../panels.ts";
-import { leftoverPrimary } from "./color.ts";
-import { leftoverColorsRequest } from "./prompt.ts";
 import type { OrganizeProgress, PanelProps, PolishApi } from "../panels.ts";
 import { SimilarProducts } from "../references/SimilarProducts.tsx";
 import { Button, Spinner } from "../ui.tsx";
@@ -12,24 +9,15 @@ import { ComponentsSection, MotionSection } from "./PageSections.tsx";
 import { Notice, TextButton } from "./parts.tsx";
 import { afterSave, changeCount, desiredLayers, EMPTY_DRAFT, type PolishDraft, tokenChangeCount, tokenDraft, usePolishDraft } from "./state.ts";
 import { STRINGS } from "./strings.ts";
-import { ColorSection, FontSection, ShapeSection } from "./TokenSections.tsx";
+import { FontSection } from "./TokenSections.tsx";
 
-/** 样式层生效后稍等再识别，避免读到换色前的页面。 */
-const SETTLE_MS = 400;
+const NAV = ["fonts", "style", "components", "motion"] as const;
 
-const NAV = [
-	["polish-fonts", "fonts"],
-	["polish-colors", "colors"],
-	["polish-shape", "shape"],
-	["polish-components", "components"],
-	["polish-motion", "motion"],
-	["polish-references", "references"],
-] as const;
-
-/** 「打磨」工具窗：只放和当前页面有关的东西，点一下预览立刻变，满意再保存（字体、配色、形状）或交给 AI（组件、动效）。 */
+/** 「打磨」工具窗：只放和当前页面有关的东西，点一下预览立刻变，满意再保存（字体）或交给 AI（组件、动效）。 */
 export function PolishPanel(panel: PanelProps) {
 	const { locale, preview, project, callModule } = panel;
 	const s = STRINGS[locale];
+	const [tab, setTab] = useState<(typeof NAV)[number]>("fonts");
 	const [draft, setDraft] = usePolishDraft(project.dir);
 	const polish = usePolishStatus(callModule);
 	const page = useInspection(preview);
@@ -38,18 +26,40 @@ export function PolishPanel(panel: PanelProps) {
 	const sync = usePreviewSync(preview, layers, tokens.fontImports ?? []);
 
 	const status = polish.status.state === "ready" ? polish.status.status : undefined;
-	const leftovers = useLeftoverColors(panel, draft, status?.values["--sui-color-primary"], page.run, sync.synced);
 	const tokenNote = !preview.ready ? s.needsPreview : !status?.organized ? s.needsOrganize : undefined;
 	const pageNote = preview.ready ? undefined : s.needsPreview;
-	const tokenProps = { locale, draft, setDraft, saved: status?.values ?? {}, disabled: Boolean(tokenNote), note: tokenNote };
+	const tokenProps = { inspection: page.inspection, locale, draft, setDraft, saved: status?.values ?? {}, disabled: Boolean(tokenNote), note: tokenNote };
 	const pageProps = { panel, draft, setDraft, ...page, onReinspect: page.run, disabled: Boolean(pageNote), note: pageNote };
 
 	return (
 		<div className="flex flex-1 flex-col">
 			<div className="sticky top-0 z-10 border-b border-line bg-app">
-				<nav aria-label={s.sections} className="flex gap-0.5 overflow-x-auto px-2 py-1">
-					{NAV.map(([id, key]) => (
-						<button key={id} type="button" onClick={() => document.getElementById(id)?.scrollIntoView({ behavior: "smooth" })} className="h-6 shrink-0 rounded-md px-2 text-xs text-muted hover:bg-hover hover:text-fg">
+				<nav role="tablist" aria-label={s.sections} className="flex gap-0.5 px-2 py-1">
+					{NAV.map((key, index) => (
+						<button
+							key={key}
+							id={`polish-tab-${key}`}
+							type="button"
+							role="tab"
+							aria-selected={tab === key}
+							aria-controls="polish-content"
+							tabIndex={tab === key ? 0 : -1}
+							onClick={() => setTab(key)}
+							onKeyDown={(event) => {
+								const targets: Record<string, number> = {
+									ArrowRight: (index + 1) % NAV.length,
+									ArrowLeft: (index + NAV.length - 1) % NAV.length,
+									Home: 0,
+									End: NAV.length - 1,
+								};
+								const next = targets[event.key];
+								if (next === undefined) return;
+								event.preventDefault();
+								setTab(NAV[next]!);
+								document.getElementById(`polish-tab-${NAV[next]}`)?.focus();
+							}}
+							className={`h-8 cursor-pointer rounded-md px-2 text-xs ${tab === key ? "bg-hover text-fg" : "text-muted hover:bg-hover"}`}
+						>
 							{s[key]}
 						</button>
 					))}
@@ -61,22 +71,12 @@ export function PolishPanel(panel: PanelProps) {
 				{!preview.ready && <Notice>{project.previewUrl ? s.previewConnecting : s.previewNotRunning}</Notice>}
 				{sync.error && <Notice tone="danger">{s.previewFailed(sync.error)}</Notice>}
 				<StatusCard panel={panel} polish={polish} />
-				<FontSection {...tokenProps} />
-				<ColorSection
-					{...tokenProps}
-					leftovers={leftovers}
-					onFixLeftovers={() => {
-						panel.submitToAi({ text: leftoverColorsRequest({ components: leftovers, original: status!.values["--sui-color-primary"]!, locale }) });
-						panel.showChat();
-					}}
-				/>
-				<ShapeSection {...tokenProps} />
-				<ComponentsSection {...pageProps} />
-				<MotionSection {...pageProps} />
-				<section id="polish-references" aria-label={s.references} className="scroll-mt-12 space-y-2">
-					<h3 className="font-semibold">{s.references}</h3>
-					<SimilarProducts panel={panel} compact />
-				</section>
+				<div id="polish-content" role="tabpanel" aria-labelledby={`polish-tab-${tab}`}>
+					{tab === "fonts" && <FontSection {...tokenProps} />}
+					{tab === "style" && <SimilarProducts panel={panel} compact />}
+					{tab === "components" && <ComponentsSection {...pageProps} />}
+					{tab === "motion" && <MotionSection {...pageProps} />}
+				</div>
 			</div>
 
 			<SaveBar panel={panel} draft={draft} setDraft={setDraft} polish={polish} clearPreview={sync.clearAll} />
@@ -85,25 +85,6 @@ export function PolishPanel(panel: PanelProps) {
 }
 
 type Polish = ReturnType<typeof usePolishStatus>;
-
-/**
- * 改了配色时，等样式层生效后重新识别页面，找出仍是原主色的组件（写死的颜色）。
- * 只认这次配色下识别出的结果，换色前的识别结果不算。
- */
-function useLeftoverColors(panel: PanelProps, draft: PolishDraft, original: string | undefined, inspect: ReturnType<typeof useInspection>["run"], synced: number) {
-	const tokens = tokenDraft(draft).tokens;
-	const primary = tokens["--sui-color-primary"];
-	const key = primary && original && primary !== original ? `${draft.palette}|${primary}` : undefined;
-	const [found, setFound] = useState<{ key: string; components: FoundComponent[] }>();
-	useEffect(() => {
-		if (!key || !original || !panel.preview.ready) return;
-		const timer = setTimeout(() => {
-			void inspect().then((result) => result && setFound({ key, components: leftoverPrimary(result, original) }));
-		}, SETTLE_MS);
-		return () => clearTimeout(timer);
-	}, [key, original, synced, panel.preview.ready, inspect]);
-	return found && found.key === key ? found.components : [];
-}
 
 function organizeStep(locale: PanelProps["locale"], progress: OrganizeProgress[]) {
 	const s = STRINGS[locale];
