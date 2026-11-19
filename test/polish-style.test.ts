@@ -9,7 +9,7 @@ import { styleLayer } from "../server/modules/style-plan.ts";
 import { StyleTrial } from "../web/src/polish/style/trial.ts";
 import type { PageInspection, PreviewControl } from "../web/src/panels.ts";
 
-const page: PageInspection = { url: "http://localhost:1234/", components: [{ kind: "heading", count: 1, selector: "h1", groupSelector: "h1", text: "Hello", styles: { fontSize: "24px" } }], fonts: [], colors: [] };
+const page: PageInspection & { stylePageId: string } = { stylePageId: "first", url: "http://localhost:1234/", components: [{ kind: "heading", count: 1, selector: "h1", groupSelector: "h1", text: "Hello", styles: { fontSize: "24px" } }], fonts: [], colors: [] };
 const plan = { summary: "Editorial hierarchy", changes: [{ target: 0, properties: { "font-size": "40px", "margin-bottom": "24px", "color": "#112233" } }] };
 const reference = { name: "Reference", url: "https://example.com/", image: "aGVsbG8=" };
 
@@ -47,7 +47,7 @@ function fixture() {
  let submitted = 0;
  const preview: PreviewControl = { ready: true, inspect: async () => current, applyLayer: async (_id, value) => { css = value; }, clearLayer: async () => { css = ""; }, clearAll: async () => {}, loadFonts: async () => {}, readTokens: async () => ({}) };
  const trial = new StyleTrial(preview, () => { submitted++; });
- return { trial, preview, navigate: () => { current = { ...page, url: "http://localhost:1234/other" }; }, get css() { return css; }, get submitted() { return submitted; } };
+ return { trial, preview, reload: () => { current = { ...page, stylePageId: "second" }; }, navigate: () => { current = { ...page, url: "http://localhost:1234/other" }; }, get css() { return css; }, get submitted() { return submitted; } };
 }
 
 test("style is tried on the actual preview; only explicit confirmation submits concrete changes and reference", async () => {
@@ -92,4 +92,13 @@ test("page changes invalidate the trial before application or confirmation", asy
  await assert.rejects(g.trial.confirm(), /page/i);
  assert.equal(g.css, "");
  assert.equal(g.submitted, 0);
+});
+
+
+test("a new document at the same URL cannot confirm an old trial", async () => {
+ const f = fixture();
+ await f.trial.try(reference, async () => plan);
+ f.reload();
+ await assert.rejects(f.trial.confirm(), /page/i);
+ assert.equal(f.submitted, 0);
 });
