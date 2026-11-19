@@ -119,7 +119,7 @@ export function useInspection(preview: PreviewControl) {
 
 	useEffect(() => {
 		if (preview.ready) void run();
-	}, [preview.ready, run]);
+	}, [preview.ready, preview.pageHref, run]);
 
 	return { inspection, loading, error, run };
 }

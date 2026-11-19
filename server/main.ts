@@ -160,6 +160,7 @@ function openBrowser(url: string) {
 const httpServer = createServer();
 const vite = await createViteServer({
 	root: WEB_ROOT,
+	cacheDir: join(APP_HOME, "vite"),
 	configFile: false,
 	plugins: [react(), tailwindcss()],
 	appType: "spa",

@@ -53,7 +53,8 @@ test("an outlined badge can be applied through the real panel and bridge; a repl
        import { installPreviewOps } from '/server/preview-ops.ts';
        import { inspectPage } from '/server/page-inspect.ts';
        import { PREVIEW_OP_MESSAGE } from '/server/protocol.ts';
-       installPreviewOps({ allowed: [location.origin], type: PREVIEW_OP_MESSAGE, tokenNames: [], inspect: inspectPage });
+       import { STYLE_LAYER } from '/server/modules/style-scope.ts';
+       installPreviewOps({ allowed: [location.origin], type: PREVIEW_OP_MESSAGE, tokenNames: [], inspect: inspectPage, styleLayer: STYLE_LAYER });
       </script>`);
     });
    },
@@ -66,7 +67,7 @@ test("an outlined badge can be applied through the real panel and bridge; a repl
  const page = await browser.newPage();
  page.setDefaultTimeout(10_000);
  await page.goto(server.resolvedUrls!.local[0]!);
- const panel = page.getByRole("region", { name: "Components on this page" });
+ const panel = page.getByRole("region", { name: "Components" });
  await panel.locator("summary").filter({ hasText: "Badges" }).click();
  await panel.getByRole("button", { name: "Ready · 1", exact: true }).click();
  await panel.getByRole("button", { name: "Outline", exact: true }).click();

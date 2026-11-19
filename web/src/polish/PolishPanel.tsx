@@ -1,7 +1,9 @@
 import { Check, CircleAlert, Wand2 } from "lucide-react";
 import { useEffect, useMemo, useState } from "react";
 import type { OrganizeProgress, PanelProps, PolishApi } from "../panels.ts";
-import { SimilarProducts } from "../references/SimilarProducts.tsx";
+import { StylePanel } from "./style/StylePanel.tsx";
+import { useTargetDraft } from "./target-hooks.ts";
+import { clearTargets } from "./targets.ts";
 import { Button, Spinner } from "../ui.tsx";
 import { savePayload } from "./draft.ts";
 import { useInspection, usePolishStatus, usePreviewSync } from "./hooks.ts";
@@ -19,6 +21,7 @@ export function PolishPanel(panel: PanelProps) {
 	const s = STRINGS[locale];
 	const [tab, setTab] = useState<(typeof NAV)[number]>("fonts");
 	const [draft, setDraft] = usePolishDraft(project.dir);
+	const [styleKey, setStyleKey] = useState(0);
 	const polish = usePolishStatus(callModule);
 	const page = useInspection(preview);
 	const tokens = useMemo(() => tokenDraft(draft), [draft]);
@@ -73,13 +76,13 @@ export function PolishPanel(panel: PanelProps) {
 				<StatusCard panel={panel} polish={polish} />
 				<div id="polish-content" role="tabpanel" aria-labelledby={`polish-tab-${tab}`}>
 					{tab === "fonts" && <FontSection {...tokenProps} />}
-					{tab === "style" && <SimilarProducts panel={panel} compact />}
+					<div hidden={tab !== "style"}><StylePanel key={styleKey} panel={panel} /></div>
 					{tab === "components" && <ComponentsSection {...pageProps} />}
 					{tab === "motion" && <MotionSection {...pageProps} />}
 				</div>
 			</div>
 
-			<SaveBar panel={panel} draft={draft} setDraft={setDraft} polish={polish} clearPreview={sync.clearAll} />
+			<SaveBar panel={panel} draft={draft} setDraft={setDraft} polish={polish} clearPreview={async () => { await sync.clearAll(); setStyleKey((key) => key + 1); }} />
 		</div>
 	);
 }
@@ -184,7 +187,8 @@ function SaveBar({ panel, draft, setDraft, polish, clearPreview }: SaveBarProps)
 	const s = STRINGS[locale];
 	const [state, setState] = useState<{ state: "idle" | "saving" | "saved" } | { state: "error"; message: string }>({ state: "idle" });
 	const status = polish.status.state === "ready" ? polish.status.status : undefined;
-	const count = changeCount(draft);
+	const [targets] = useTargetDraft(panel.project.dir);
+	const count = changeCount(draft) + Object.keys(targets.trials).length;
 	const tokenCount = tokenChangeCount(draft);
 	const trials = count - tokenCount;
 	// 又有新的改动时收起“已保存”
@@ -210,6 +214,7 @@ function SaveBar({ panel, draft, setDraft, polish, clearPreview }: SaveBarProps)
 		try {
 			if (preview.ready) await clearPreview();
 			setDraft(() => EMPTY_DRAFT);
+			clearTargets(panel.project.dir);
 		} catch (e) {
 			setState({ state: "error", message: e instanceof Error ? e.message : String(e) });
 		}
