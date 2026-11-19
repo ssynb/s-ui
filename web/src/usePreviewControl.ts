@@ -56,7 +56,10 @@ export function usePreviewControl(frame: RefObject<HTMLIFrameElement | null>, pr
 			if (e.origin !== origin || e.source !== frame.current?.contentWindow || e.data?.type !== PREVIEW_OP_MESSAGE) return;
 			const data = e.data as PreviewAnnouncement | PreviewOpReply;
 			if ("event" in data) {
-				if (data.event === "ready") becameReady(data.href);
+				if (data.event === "ready") {
+					if (data.href) becameReady(data.href);
+					else send({ name: "ping" }).then(becameReady, () => {});
+				}
 				else if (data.event === "leaving") setState(false);
 				else setPageHref(data.href);
 				return;

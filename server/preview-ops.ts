@@ -36,6 +36,12 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 	};
 	const routeOf = (href: string) => href.split("#", 1)[0]!;
 	let currentRoute = routeOf(location.href);
+	let appOrigin = allowed.find((origin) => document.referrer.startsWith(`${origin}/`));
+	const announce = (event: PreviewAnnouncement["event"]) => {
+		if (parent === window) return;
+		if (appOrigin) parent.postMessage({ type, event, href: event === "leaving" ? undefined : currentRoute }, appOrigin);
+		else if (event !== "navigated") parent.postMessage({ type, event }, "*");
+	};
 	let saved = load();
 	const persist = () => sessionStorage.setItem(STORE, JSON.stringify(saved));
 
@@ -133,7 +139,7 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 		if (route === currentRoute) return;
 		currentRoute = route;
 		pruneLayers();
-		parent.postMessage({ type, event: "navigated", href: route }, "*");
+		announce("navigated");
 	};
 	for (const name of ["pushState", "replaceState"] as const) {
 		const original = history[name];
@@ -150,6 +156,7 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 
 	addEventListener("message", async (e) => {
 		if (e.source !== parent || !allowed.includes(e.origin) || e.data?.type !== type || e.data.event) return;
+		appOrigin = e.origin;
 		const { id, op } = e.data;
 		try {
 			parent.postMessage({ type, id, ok: true, result: await run(op) }, e.origin);
@@ -157,9 +164,6 @@ export function installPreviewOps({ allowed, type, tokenNames, inspect }: Config
 			parent.postMessage({ type, id, ok: false, error: (error as Error).message }, e.origin);
 		}
 	});
-	// 通知只说明预览地址与状态，可以发给任意父页面（工作台来源有两个写法，逐个指定会在控制台报错）。
-	if (parent !== window) {
-		parent.postMessage({ type, event: "ready", href: currentRoute }, "*");
-		addEventListener("pagehide", () => parent.postMessage({ type, event: "leaving" }, "*"));
-	}
+	announce("ready");
+	addEventListener("pagehide", () => announce("leaving"));
 }
