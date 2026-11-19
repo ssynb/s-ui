@@ -4,9 +4,12 @@
 /** 能识别的组件类别。 */
 export type ComponentKind = "button" | "link" | "input" | "card" | "nav" | "heading" | "image" | "list" | "badge" | "table" | "dialog" | "footer";
 
+export type ComponentInstance = { pageUrl: string; selector: string; sourceSelector: string; name: string; styles: Record<string, string> };
+
 /** 一类组件在当前页面里的情况。 */
 export type FoundComponent = {
 	kind: ComponentKind;
+	instances?: ComponentInstance[];
 	/** 页面里这一类的实例数。 */
 	count: number;
 	/** 代表实例的选择器（唯一定位一个元素，可交给 AI 或做高亮）。 */
@@ -32,6 +35,26 @@ export type PageInspection = {
 
 /** 在预览页面里执行：识别组件、字体与颜色。必须自包含——它会被转成字符串注入页面。 */
 export function inspectPage(): PageInspection {
+	// 预览样式可跨刷新恢复；页面标记使旧文档/路由的选择器永远不匹配新页面。
+	const root = document.documentElement;
+	const scopeAttribute = "data-sui-polish-page";
+	if (!root.hasAttribute(scopeAttribute)) root.setAttribute(scopeAttribute, Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16)).join("-"));
+	const scope = `html[${scopeAttribute}="${root.getAttribute(scopeAttribute)}"]`;
+	const host = window as Window & { __suiPolishRouteWatch?: boolean };
+	if (!host.__suiPolishRouteWatch) {
+		host.__suiPolishRouteWatch = true;
+		const invalidate = () => root.removeAttribute(scopeAttribute);
+		for (const method of ["pushState", "replaceState"] as const) {
+			const original = history[method].bind(history);
+			history[method] = (...args: Parameters<History["pushState"]>) => {
+				const before = location.href;
+				original(...args);
+				if (location.href !== before) invalidate();
+			};
+		}
+		window.addEventListener("popstate", invalidate);
+		window.addEventListener("hashchange", invalidate);
+	}
 	const TEXT_LIMIT = 40;
 	const STYLE_KEYS = ["color", "backgroundColor", "borderRadius", "padding", "fontFamily", "fontSize", "fontWeight", "boxShadow", "border"] as const;
 	const BUTTON_LIKE = "button, [role=button], input[type=submit], input[type=button], input[type=reset]";
@@ -73,7 +96,7 @@ export function inspectPage(): PageInspection {
 	const cardCandidates = [...document.querySelectorAll("div, article, li, section, a")].filter((el) => {
 		const r = el.getBoundingClientRect();
 		const s = getComputedStyle(el);
-		return visible(el) && hasBox(el) && parseFloat(s.borderTopLeftRadius) > 0 && r.width >= 120 && r.height >= 80 && (el.textContent ?? "").trim().length > 0 && !el.matches(BUTTON_LIKE);
+		return visible(el) && hasBox(el) && parseFloat(s.borderTopLeftRadius) > 0 && r.width >= 120 && r.height >= 80 && (el.textContent ?? "").trim().length > 0 && !groups.get("button")!.includes(el);
 	});
 	// 同一种卡片：标签相同，且共用至少一个 class（常见写法是基础 class 加变体 class）；都没有 class 时也算。
 	const sameShape = (a: Element, b: Element) =>
@@ -95,7 +118,7 @@ export function inspectPage(): PageInspection {
 	const selectorOf = (el: Element) => {
 		const parts: string[] = [];
 		for (let node: Element | null = el; node && node !== document.documentElement; node = node.parentElement) {
-			if (node.id) {
+			if (node.id && document.querySelectorAll(`#${CSS.escape(node.id)}`).length === 1) {
 				parts.unshift(`#${CSS.escape(node.id)}`);
 				break;
 			}
@@ -113,14 +136,14 @@ export function inspectPage(): PageInspection {
 		const tags = new Set(els.map((e) => e.tagName.toLowerCase()));
 		if (shared.length) {
 			const candidate = (tags.size === 1 ? [...tags][0] : "") + shared.map((c) => `.${CSS.escape(c)}`).join("");
-			if (document.querySelectorAll(candidate).length === els.length) return candidate;
+			if ([...document.querySelectorAll(candidate)].every(e => els.includes(e)) && document.querySelectorAll(candidate).length === els.length) return candidate;
 		}
 		if (tags.size === 1 && kind !== "card" && kind !== "badge" && kind !== "link") {
 			const tag = [...tags][0]!;
-			if (document.querySelectorAll(tag).length === els.length) return tag;
+			if ([...document.querySelectorAll(tag)].every(e => els.includes(e)) && document.querySelectorAll(tag).length === els.length) return tag;
 		}
 		const base = baseQuery.get(kind);
-		if (base && document.querySelectorAll(base).length === els.length) return base;
+		if (base && [...document.querySelectorAll(base)].every(e => els.includes(e)) && document.querySelectorAll(base).length === els.length) return base;
 		return els.map(selectorOf).join(", ");
 	};
 
@@ -129,7 +152,14 @@ export function inspectPage(): PageInspection {
 		if (!els.length) continue;
 		const first = els[0]!;
 		const s = getComputedStyle(first);
+		const instances = els.map((el, index) => {
+			const sourceSelector = selectorOf(el);
+			const label = el.getAttribute("aria-label") || (el as HTMLInputElement).labels?.[0]?.textContent || el.getAttribute("alt") || (el as HTMLElement).innerText || el.getAttribute("placeholder") || (el as HTMLInputElement).value || el.tagName.toLowerCase();
+			const computed = getComputedStyle(el);
+			return { pageUrl: location.href, selector: `${scope} ${sourceSelector}`, sourceSelector, name: `${label.trim().replace(/\s+/g, " ").slice(0, TEXT_LIMIT)} · ${index + 1}`, styles: Object.fromEntries(STYLE_KEYS.map(k => [k, computed[k]])) };
+		});
 		components.push({
+			instances,
 			kind,
 			count: els.length,
 			selector: selectorOf(first),

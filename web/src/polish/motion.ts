@@ -7,6 +7,9 @@ import { defaults, type ParamSpec, type ParamValues, type Text } from "./types.t
 
 export type MotionEffect = {
 	id: string;
+	/** 复杂交互只在面板示例中运行，应用时由 AI 接入业务。 */
+	demo?: "confirm";
+	source?: string;
 	name: Text;
 	summary: Text;
 	/** 能用在哪些组件上。 */
@@ -25,6 +28,47 @@ const px = (key: string, zh: string, en: string, min: number, max: number, value
 const ms = (p: ParamValues, key = "duration") => `${n(p, key)}ms`;
 
 export const MOTION_EFFECTS: MotionEffect[] = [
+	{
+		id: "dialog-enter", name: { zh: "弹窗进入", en: "Dialog entrance" },
+		summary: { zh: "预览已打开弹窗的淡入缩放；真实开关由 AI 接入", en: "Preview fade and scale on an open dialog; AI wires the actual open event" },
+		kinds: ["dialog"], source: "https://transitions.dev", replayable: true,
+		params: [pct("scale", "初始大小", "Initial size", 90, 99, 96), duration(180)],
+		css: (sel, p, c) => [rule(sel, { animation: `${c.frames("dialog-enter")} ${ms(p)} ${EASE_OUT} both` }), `@keyframes ${c.frames("dialog-enter")} { from { opacity: 0; transform: scale(${n(p, "scale") / 100}); } }`],
+		describe: p => ({ zh: `打开弹窗时从 ${n(p, "scale")}% 大小淡入，${n(p, "duration")}ms；关闭即时完成，不延迟焦点归还`, en: `On opening, fade in from ${n(p, "scale")}% scale over ${n(p, "duration")}ms; close immediately without delaying focus restoration` }),
+		states: { zh: "打开、关闭、Esc 关闭与焦点归还；减弱动态即时切换", en: "open, closed, Escape dismissal and focus restoration; instant with reduced motion" },
+	},
+	{
+		id: "focus-halo", name: { zh: "聚焦光环", en: "Focus halo" },
+		summary: { zh: "聚焦输入框时出现主色光环，离开恢复", en: "Show a primary halo while the input is focused" },
+		kinds: ["input"], source: "https://transitions.dev", params: [px("width", "光环宽度", "Halo width", 1, 6, 3), duration(160)],
+		css: (sel, p, c) => [rule(sel, { transition: `box-shadow ${ms(p)} ${EASE_OUT}` }), rule(`${sel}:focus`, { "box-shadow": `0 0 0 ${n(p, "width")}px color-mix(in oklab, ${c.primary} 25%, transparent)` })],
+		describe: p => ({ zh: `聚焦时显示 ${n(p, "width")}px 主色浅光环，${n(p, "duration")}ms 渐变；离开恢复，不移除键盘焦点提示`, en: `On focus, show a ${n(p, "width")}px soft primary halo over ${n(p, "duration")}ms; restore on blur without removing keyboard focus cues` }),
+		states: { zh: "默认、聚焦、离开、禁用", en: "default, focused, blurred, disabled" },
+	},
+	{
+		id: "hover-grow", name: { zh: "悬停放大", en: "Hover grow" },
+		summary: { zh: "悬停或键盘聚焦时轻微放大", en: "Grows on hover or keyboard focus" },
+		kinds: ["button", "link", "image", "card"], source: "https://transitions.dev",
+		params: [pct("scale", "放大到", "Scale to", 101, 110, 103), duration(160)],
+		css: (sel, p) => [rule(sel, { transition: `transform ${ms(p)} ${EASE_OUT}` }), rule(`${sel}:is(:hover, :focus-visible):not(:disabled):not([aria-disabled=true])`, { transform: `scale(${n(p, "scale") / 100})` })],
+		describe: p => ({ zh: `悬停或键盘聚焦时放大到 ${n(p, "scale")}%；移开恢复`, en: `Grow to ${n(p, "scale")}% on hover or keyboard focus; restore on leave` }),
+		states: { zh: "默认、悬停、键盘聚焦、禁用不放大", en: "default, hover, keyboard focus; no growth when disabled" },
+	},
+	{
+		id: "underline-reveal", name: { zh: "下划线展开", en: "Underline reveal" },
+		summary: { zh: "指向链接或键盘聚焦时展开下划线", en: "Reveal an underline on hover or keyboard focus" },
+		kinds: ["link"], source: "https://transitions.dev", params: [duration(180)],
+		css: (sel, p) => [rule(sel, { "text-decoration": "none", "background-image": "linear-gradient(currentColor, currentColor)", "background-repeat": "no-repeat", "background-position": "0 100%", "background-size": "0% 1px", transition: `background-size ${ms(p)} ${EASE_OUT}` }), rule(`${sel}:is(:hover, :focus-visible)`, { "background-size": "100% 1px" })],
+		describe: p => ({ zh: `悬停和键盘聚焦时下划线从左到右展开，${n(p, "duration")}ms；移开收回`, en: `Reveal underline left to right on hover and keyboard focus over ${n(p, "duration")}ms; retract on leave` }),
+		states: { zh: "默认、悬停、键盘聚焦", en: "default, hover, keyboard focus" },
+	},
+	{
+		id: "confirm-inline", name: { zh: "原地确认", en: "Inline confirmation" },
+		summary: { zh: "仅示例：确认、处理中、成功或失败，交给 AI 接入真实操作", en: "Demo only: confirm, pending, success or error; ask AI to wire the real action" },
+		kinds: ["button"], demo: "confirm", source: "https://uiarc.dev/components/confirm-morph/markdown", params: [], css: () => [],
+		describe: () => ({ zh: "按钮原地展开确认/取消，确认后显示处理中；真实操作成功或失败后展示结果，保留重试；不把示例当作真实提交", en: "Expand the button into confirm/cancel, show pending after confirmation, then the real success or error with retry; never treat the demo as a real submission" }),
+		states: { zh: "默认、确认/取消、处理中、成功、失败/重试；键盘可操作", en: "idle, confirm/cancel, pending, success, error/retry; keyboard operable" },
+	},
 	{
 		id: "press",
 		name: { zh: "按压缩放", en: "Press / scale down" },
@@ -214,5 +258,9 @@ export const MOTION_EFFECTS: MotionEffect[] = [
 
 export function motionLayer(effect: MotionEffect, found: FoundComponent, params: ParamValues, run = 0) {
 	const ctx = styleContext(found);
-	return effect.css(ctx.s, { ...defaults(effect.params), ...params }, { primary: ctx.primary, kind: found.kind, frames: (name) => `sui-polish-${name}-${found.kind}-${run}` }).join("\n");
+	const css = effect.css(ctx.s, { ...defaults(effect.params), ...params }, { primary: ctx.primary, kind: found.kind, frames: (name) => `sui-polish-${name}-${found.kind}-${Array.from(found.groupSelector).reduce((h, c) => Math.imul(h, 31) + c.charCodeAt(0) | 0, 0) >>> 0}-${run}` }).join("\n");
+	// 状态规则带伪类且为 !important；减弱动态必须比它们更具体。
+	const reduced = ctx.s.repeat(4);
+	return `${css}
+@media (prefers-reduced-motion: reduce) { ${rule(`${reduced}, ${reduced}::after, ${reduced}::before, ${reduced} *`, { animation: "none", transition: "none", transform: "none", translate: "none", rotate: "none", scale: "none" })} }`;
 }
