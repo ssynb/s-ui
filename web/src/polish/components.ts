@@ -268,5 +268,8 @@ export const KIND_STATES: Record<ComponentKind, Text> = {
 
 export function componentLayer(found: FoundComponent, variantId: string) {
 	const variant = COMPONENT_VARIANTS[found.kind]?.find((x) => x.id === variantId);
-	return variant ? variant.css(styleContext(found)) : "";
+	if (!variant) return "";
+	const context = styleContext(found);
+	return `${variant.css(context)}
+@media (prefers-reduced-motion: reduce) { ${rule(context.s.repeat(4), { transition: "none", transform: "none", animation: "none" })} }`;
 }
