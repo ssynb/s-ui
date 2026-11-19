@@ -73,9 +73,8 @@ function TargetOptions({ panel, group, instance, mode }: { panel: PanelProps; gr
  const apply = async (id: string, text: string) => {
   try {
    const current = await panel.preview.inspect();
-   const currentGroup = current.components.find(c => c.kind === group.kind);
-   const currentInstance = currentGroup?.instances?.find(i => i.selector === instance.selector);
-   if (!currentGroup || !currentInstance || current.url !== target.pageUrl || selectTarget(currentGroup, currentInstance, draft.all).groupSelector !== target.groupSelector) throw new Error(words.stale);
+   const expected = target.scope === "group" ? target.instances!.map(i => i.selector) : [target.selector];
+   if (current.url !== target.pageUrl || expected.some(selector => !current.targetSelectors?.includes(selector))) throw new Error(words.stale);
    panel.submitToAi({ text });
    setTrial(id);
    panel.showChat();

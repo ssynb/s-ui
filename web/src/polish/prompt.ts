@@ -43,7 +43,7 @@ function head(found: FoundComponent, locale: Locale) {
 		.map(([key, value]) => `${kebab(key)}: ${value}`)
 		.join("; ");
 	const target = found as FoundComponent & { pageUrl?: string; scope?: "one" | "group"; sourceSelector?: string };
-	const location = target.scope ? (locale === "zh" ? `范围：${target.scope === "one" ? "只改这一项，不改同类其他元素" : "应用到同类全部"}；预览定位 \`${found.groupSelector}\`；源码定位 \`${target.sourceSelector}\`（${found.text}）。预览的 data-sui-polish-page 标记不是源码，不要写入项目。` : `Scope: ${target.scope === "one" ? "Only this instance; leave its peers unchanged" : "All instances of this type"}; preview selector \`${found.groupSelector}\`; source selector \`${target.sourceSelector}\` (${found.text}). The data-sui-polish-page marker is preview-only; do not add it to source.`) : w.where(found.groupSelector, found.selector, found.text);
+	const location = target.scope ? (locale === "zh" ? `范围：${target.scope === "one" ? "只改这一项，不改同类其他元素" : "应用到同类全部"}；预览定位 \`${found.groupSelector}\`；源码定位 \`${target.sourceSelector}\`（${found.text}）。预览的 data-sui-polish-* 标记不是源码，不要写入项目。` : `Scope: ${target.scope === "one" ? "Only this instance; leave its peers unchanged" : "All instances of this type"}; preview selector \`${found.groupSelector}\`; source selector \`${target.sourceSelector}\` (${found.text}). The data-sui-polish-* markers are preview-only; do not add it to source.`) : w.where(found.groupSelector, found.selector, found.text);
 	return [...(target.pageUrl ? [`URL: ${target.pageUrl}`] : []), location, ...(styles ? [`${w.current}${w.sep}${styles}`] : [])];
 }
 

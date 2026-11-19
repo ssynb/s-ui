@@ -27,6 +27,8 @@ export type PageInspection = {
 	url: string;
 	/** 按数量从多到少。 */
 	components: FoundComponent[];
+	/** 已识别目标中，仍唯一指向同一可见 DOM 元素的选择器；不依赖试用后的外观分类。 */
+	targetSelectors?: string[];
 	/** 页面上实际用到的字体（计算后的 font-family，按使用多少排序）。 */
 	fonts: string[];
 	/** 页面上用得最多的颜色（文字与背景，rgb 字符串，按使用多少排序）。 */
@@ -40,7 +42,13 @@ export function inspectPage(): PageInspection {
 	const scopeAttribute = "data-sui-polish-page";
 	if (!root.hasAttribute(scopeAttribute)) root.setAttribute(scopeAttribute, Array.from(crypto.getRandomValues(new Uint32Array(4)), n => n.toString(16)).join("-"));
 	const scope = `html[${scopeAttribute}="${root.getAttribute(scopeAttribute)}"]`;
-	const host = window as Window & { __suiPolishRouteWatch?: boolean };
+	const host = window as Window & {
+		__suiPolishRouteWatch?: boolean;
+		__suiPolishTargets?: { scope: string; nextId: number; elements: Map<Element, string> };
+	};
+	if (host.__suiPolishTargets?.scope !== scope) host.__suiPolishTargets = { scope, nextId: 0, elements: new Map() };
+	const targets = host.__suiPolishTargets;
+	for (const element of targets.elements.keys()) if (!element.isConnected) targets.elements.delete(element);
 	if (!host.__suiPolishRouteWatch) {
 		host.__suiPolishRouteWatch = true;
 		const invalidate = () => root.removeAttribute(scopeAttribute);
@@ -148,15 +156,26 @@ export function inspectPage(): PageInspection {
 	};
 
 	const components: FoundComponent[] = [];
-	for (const [kind, els] of groups) {
+	const classified = new Set<Element>();
+	for (const [kind, candidates] of groups) {
+		// 一次采集可能命中多条启发式规则；按已有类别优先级，每个 DOM 元素只列一次。
+		const els = [...new Set(candidates)].filter(el => !classified.has(el));
+		for (const el of els) classified.add(el);
 		if (!els.length) continue;
 		const first = els[0]!;
 		const s = getComputedStyle(first);
 		const instances = els.map((el, index) => {
 			const sourceSelector = selectorOf(el);
+			let selector = targets.elements.get(el);
+			if (!selector) {
+				const id = String(++targets.nextId);
+				el.setAttribute("data-sui-polish-target", id);
+				selector = `${scope} [data-sui-polish-target="${id}"]`;
+				targets.elements.set(el, selector);
+			}
 			const label = el.getAttribute("aria-label") || (el as HTMLInputElement).labels?.[0]?.textContent || el.getAttribute("alt") || (el as HTMLElement).innerText || el.getAttribute("placeholder") || (el as HTMLInputElement).value || el.tagName.toLowerCase();
 			const computed = getComputedStyle(el);
-			return { pageUrl: location.href, selector: `${scope} ${sourceSelector}`, sourceSelector, name: `${label.trim().replace(/\s+/g, " ").slice(0, TEXT_LIMIT)} · ${index + 1}`, styles: Object.fromEntries(STYLE_KEYS.map(k => [k, computed[k]])) };
+			return { pageUrl: location.href, selector, sourceSelector, name: `${label.trim().replace(/\s+/g, " ").slice(0, TEXT_LIMIT)} · ${index + 1}`, styles: Object.fromEntries(STYLE_KEYS.map(k => [k, computed[k]])) };
 		});
 		components.push({
 			instances,
@@ -186,5 +205,9 @@ export function inspectPage(): PageInspection {
 	}
 	const ranked = (counts: Map<string, number>) => [...counts].sort((a, b) => b[1] - a[1]).map(([k]) => k);
 
-	return { url: location.href, components, fonts: ranked(fonts), colors: ranked(colors) };
+	const targetSelectors = [...targets.elements].filter(([el, selector]) => {
+		const matches = document.querySelectorAll(selector);
+		return visible(el) && matches.length === 1 && matches[0] === el;
+	}).map(([, selector]) => selector);
+	return { url: location.href, components, targetSelectors, fonts: ranked(fonts), colors: ranked(colors) };
 }
